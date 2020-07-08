@@ -1,0 +1,8 @@
+# directories
+/__pycache__/*
+/.vscode/*
+/assets/*
+
+# files
+*.pyc
+*.jpg
