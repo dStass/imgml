@@ -1,5 +1,9 @@
+import multiprocessing
+import pickle
+
 import numpy as np
 from sklearn.linear_model import LinearRegression
+
 
 # full model
 class Model:
@@ -54,10 +58,23 @@ class Model:
     self.sub_models = sub_models
 
   def train(self):
+    processes = []
     for sub_model_key in self.sub_models:
       sub_model_tuple = self.sub_models[sub_model_key]
       for sub_model in sub_model_tuple:
-        sub_model.train()
+        p = multiprocessing.Process(target=self.train_sub_model, args=(sub_model,))
+        processes.append(p)
+    
+    for process in processes:
+      process.start()
+
+    for process in processes:
+      process.join()
+    
+    print('hi')
+
+  def train_sub_model(self, sub_model):
+    sub_model.train()
 
   def predict(self, coordinates):
 
@@ -80,8 +97,9 @@ class Model:
 
     return tuple(predicted)
 
-class TrainingModel:
+class TrainingModel(multiprocessing.Process):
   def __init__(self, predictors, responses):
+    multiprocessing.Process.__init__(self)
     self.predictors = predictors
     self.responses = responses
 
@@ -91,14 +109,13 @@ class TrainingModel:
   def predict(self, values):
     pass
 
+  def run(self):
+    pass
+
 class LinearRegressionModel(TrainingModel):
-  def train(self):
-    self.sk_regression = LinearRegression().fit(self.predictors, self.responses)
+  def run(self):
+    
 
-  def predict(self, predictors):
-    return self.sk_regression.predict(np.reshape(np.array(predictors), (1,2) ))
-
-class LogisticRegression(TrainingModel):
   def train(self):
     self.sk_regression = LinearRegression().fit(self.predictors, self.responses)
 

@@ -4,7 +4,7 @@ from processing.model import Model
 path = 'assets/shaggy.jpeg'
 ir = ImageReader()
 
-split_factor = 1
+split_factor = 4
 img_mat = ir.load(path)
 
 print("Loaded")
