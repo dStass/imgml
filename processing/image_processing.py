@@ -1,4 +1,8 @@
 from PIL import Image
+import numpy as np
+from skimage import io
+from sklearn.cluster import KMeans
+
 
 class ImageReader:
   def __init__(self):
@@ -15,6 +19,16 @@ class ImageReader:
         colour = im_loaded[row, col]
         to_return[row][col] = colour
     return to_return
+
+  def load_quantised(self, path, num_colours = -1):
+    im = io.imread(path)
+    arr = im.reshape((-1,3))
+    kmeans = KMeans(n_clusters=num_colours, random_state=42).fit(arr)
+    labels = kmeans.labels_
+    centers = kmeans.cluster_centers_
+    reduced_img = centers[labels].reshape(im.shape).astype('uint8')
+    reduced_transpose = np.transpose(reduced_img, [1,0,2])
+    return [[tuple(r) for r in l] for l in reduced_transpose.tolist()]
 
   def empty_matrix(self, height, width):
     return [[0 for w in range(width)] for h in range(height)]
