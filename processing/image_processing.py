@@ -1,12 +1,18 @@
 from PIL import Image
 import numpy as np
 from skimage import io
+from skimage.transform import resize
 from sklearn.cluster import KMeans
 
 
-class ImageReader:
-  def __init__(self):
-    pass
+class ImageIO:
+  IMG_SIZE = 512
+
+  def __init__(self, ext='jpg'):
+    self.extension = ext
+    self.FORMAT = 'JPEG'
+    if ext == 'png':
+      self.FORMAT = 'PNG'
 
   def load(self, path):
     im = Image.open(path, 'r')
@@ -21,7 +27,14 @@ class ImageReader:
     return to_return
 
   def load_quantised(self, path, num_colours = -1):
+    """
+      load an image but reduce colours into a given number of colour bins
+    """
     im = io.imread(path)
+    im = resize(im, (self.IMG_SIZE, self.IMG_SIZE), anti_aliasing=True)
+    im = self.IMG_SIZE * im
+    if im.shape[2] == 4:
+      im = np.delete(im, [3], axis=2)
     arr = im.reshape((-1,3))
     kmeans = KMeans(n_clusters=num_colours, random_state=42).fit(arr)
     labels = kmeans.labels_
@@ -33,10 +46,6 @@ class ImageReader:
   def empty_matrix(self, height, width):
     return [[0 for w in range(width)] for h in range(height)]
 
-class ImageSaver:
-  def __init__(self):
-    pass
-
   def save(self, img_mat, name, path=''):
     ROW, COL = len(img_mat), len(img_mat[0])
     to_save = Image.new('RGB', (ROW, COL))
@@ -44,4 +53,4 @@ class ImageSaver:
     for row in range(ROW):
       for col in range(COL):
         to_save_loaded[row, col] = img_mat[row][col]
-    to_save.save(path + name + ".jpg", "JPEG", optimize=True) 
+    to_save.save(path + name + '.' + self.extension, self.FORMAT, optimize=True)

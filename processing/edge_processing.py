@@ -1,3 +1,4 @@
+import math
 class EdgeDetection:
   def EdgeDetection(self):
     pass
@@ -9,7 +10,13 @@ class EdgeDetection:
 
     for row in range(ROW):
       for col in range(COL):
-        radius, total_count = self.get_k_radius(img_mat, (row, col), k_radius)
+        radius = self.get_k_radius(img_mat, (row, col), k_radius)
+        entropy = self.entropy_img(radius)
+        
+        # if 0 < entropy < 0.6:
+        #   entropy = 0
+
+        to_return[row][col] = entropy
 
     return to_return
 
@@ -34,6 +41,28 @@ class EdgeDetection:
         to_return[r+k][c+k] = img_mat[row][col]
         non_nulls += 1
   
-    return to_return, non_nulls
+    return to_return
 
 
+  def entropy_img(self, img_mat):
+    ROW = len(img_mat)
+    COL = len(img_mat[0])
+    
+    buckets = {}
+    entropy = 0
+    total = 0
+    for row in range(ROW):
+      for col in range(COL):
+        colour = img_mat[row][col]
+        if not colour: continue
+        if colour not in buckets: buckets[colour] = 0
+        buckets[colour] += 1
+        total += 1
+    
+    # calculate total entropy
+    for b in buckets:
+      count = buckets[b]
+      p = count / total
+      entropy += p * math.log(p)
+    
+    return -entropy

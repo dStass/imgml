@@ -6,4 +6,5 @@
 # files
 *.pyc
 *.jpg
+*.png
 .DS_Store
