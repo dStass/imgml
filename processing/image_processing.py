@@ -6,7 +6,8 @@ from sklearn.cluster import KMeans
 
 
 class ImageIO:
-  IMG_SIZE = 512
+  MAX_RGB = 255
+  IMG_SIZE = 256
 
   def __init__(self, ext='jpg'):
     self.extension = ext
@@ -26,21 +27,66 @@ class ImageIO:
         to_return[row][col] = colour
     return to_return
 
+  def load_recursive_quantised(self, path, start_colours, end_colours):
+    def recurse(im, curr):
+      # reshape
+      arr = im.reshape((-1,3))
+
+      # apply KMeans to group pixels into buckets
+      kmeans = KMeans(n_clusters=curr, random_state=42).fit(arr)
+      labels = kmeans.labels_
+      centers = kmeans.cluster_centers_
+      
+      # reduce the image
+      reduced_img = centers[labels].reshape(im.shape).astype('uint8')
+
+      # apply transposition since image got transposed from original in previous step
+      reduced_transpose = np.transpose(reduced_img, [1,0,2])
+
+      if curr == end_colours:
+        # return in desired format
+        return [[tuple(r) for r in l] for l in reduced_transpose.tolist()]
+
+      else:
+        return recurse(reduced_transpose, curr - 1)
+    
+    im = io.imread(path)
+    im = resize(im, (self.IMG_SIZE, self.IMG_SIZE), anti_aliasing=False)
+    im = self.MAX_RGB * im
+
+    # remove alpha value
+    if im.shape[2] == 4:
+      im = np.delete(im, [3], axis=2)
+    
+    return recurse(im, start_colours)
+
   def load_quantised(self, path, num_colours = -1):
     """
       load an image but reduce colours into a given number of colour bins
     """
     im = io.imread(path)
-    im = resize(im, (self.IMG_SIZE, self.IMG_SIZE), anti_aliasing=True)
-    im = self.IMG_SIZE * im
+    im = resize(im, (self.IMG_SIZE, self.IMG_SIZE), anti_aliasing=False)
+    im = self.MAX_RGB * im
+
+    # remove alpha value
     if im.shape[2] == 4:
       im = np.delete(im, [3], axis=2)
+
+    # reshape
     arr = im.reshape((-1,3))
+
+    # apply KMeans to group pixels into buckets
     kmeans = KMeans(n_clusters=num_colours, random_state=42).fit(arr)
     labels = kmeans.labels_
     centers = kmeans.cluster_centers_
+    
+    # reduce the image
     reduced_img = centers[labels].reshape(im.shape).astype('uint8')
+
+    # apply transposition since image got transposed from original in previous step
     reduced_transpose = np.transpose(reduced_img, [1,0,2])
+
+    # return in desired format
     return [[tuple(r) for r in l] for l in reduced_transpose.tolist()]
 
   def empty_matrix(self, height, width):

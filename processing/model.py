@@ -1,5 +1,5 @@
 import numpy as np
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, LogisticRegression
 
 # full model
 class Model:
@@ -66,10 +66,26 @@ class Model:
     row = int(round(row - row % self.height_interval))
     col = int(round(col - col % self.width_interval))
 
-    # identify the correct sub-model
-    sub_model_tuple = self.sub_models[(row, col)]
+    neighbours = []
+    for r in range(row - self.height_interval, row + int(3*self.height_interval/2), self.height_interval):
+      for c in range(col - self.width_interval, col + int(3*self.width_interval/2), self.width_interval):
+        if r == row and c == col: continue
+        if not (0 <= r < self.HEIGHT): continue
+        if not (0 <= c < self.WIDTH): continue
+        # if ()
 
-    # make rgb prediction
+        neighbours.append((r, c))
+    
+    central_prediction = self.predict_at_set_position((row, col))
+    return central_prediction
+
+
+  def predict_at_set_position(self, coordinates):
+
+    # identify the correct sub-model
+    sub_model_tuple = self.sub_models[coordinates]
+
+    # make rgb prediction (sub_model = each colour)
     predicted = []
     for sub_model in sub_model_tuple:
       np_prediction = sub_model.predict(coordinates)
@@ -77,7 +93,6 @@ class Model:
       if prediction < self.COL_MIN: prediction = self.COL_MIN
       elif prediction > self.COL_MAX: prediction = self.COL_MAX
       predicted.append(int(round(prediction)))
-
     return tuple(predicted)
 
 class TrainingModel:
@@ -98,9 +113,9 @@ class LinearRegressionModel(TrainingModel):
   def predict(self, predictors):
     return self.sk_regression.predict(np.reshape(np.array(predictors), (1,2) ))
 
-class LogisticRegression(TrainingModel):
+class LogisticRegressionModel(TrainingModel):
   def train(self):
-    self.sk_regression = LinearRegression().fit(self.predictors, self.responses)
+    self.sk_regression = LogisticRegression().fit(self.predictors, self.responses)
 
   def predict(self, predictors):
     return self.sk_regression.predict(np.reshape(np.array(predictors), (1,2) ))
