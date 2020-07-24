@@ -3,7 +3,7 @@ class EdgeDetection:
   def EdgeDetection(self):
     pass
   
-  def colour_kernel(self, entropy_value):
+  def colour_transform(self, entropy_value):
     r = int(abs(entropy_value) * 255)
     g = int(abs(entropy_value) * 255)
     b = int(abs(entropy_value) * 255)
@@ -22,7 +22,8 @@ class EdgeDetection:
         scores[row][col] = sum(img_mat[row][col]) / len(img_mat[row][col])
         avg_score = scores[row][col] 
         if scores[row][col] >= brightness*255:
-          to_return[row][col] = img_mat[row][col]
+          # to_return[row][col] = img_mat[row][col]
+          to_return[row][col] = self.colour_transform(1)
     
     return to_return
 
@@ -48,13 +49,18 @@ class EdgeDetection:
     #   for col in range(COL):
     #     score = scores[row][col]
     #     if score > upper_one_sd:
-    #       to_return[row][col] = self.colour_kernel(1)
+    #       to_return[row][col] = self.colour_transform(1)
     
     # return to_return
 
 
-  def generate_binary_edges_heatmap(self, img_mat, k_radius=2, z_val=1):
-    entropy_map = self.detect_edges(img_mat, k_radius)
+  def generate_binary_edges_heatmap(self, img_mat, entropy_map = None, k_radius=2, z_val=1):
+    """
+
+
+    """
+    if not entropy_map:
+      entropy_map = self.detect_edges(img_mat, k_radius)
     rows = len(entropy_map)
     cols = len(entropy_map[0])
 
@@ -72,9 +78,9 @@ class EdgeDetection:
     var_running_sum = 0
     for row in range(rows):
       for col in range(cols):
-        if entropy_map[row][col] == 0: continue
+        # if entropy_map[row][col] == 0: continue
         var_running_sum += math.pow(entropy_map[row][col] - entropy_mean, 2)
-    variance = var_running_sum / entropy_count
+    variance = var_running_sum / (entropy_count - 1)
     sd = math.sqrt(variance)
 
     # z_val = -0.2
@@ -84,7 +90,8 @@ class EdgeDetection:
       for col in range(cols):
         entropy = entropy_map[row][col]
         if entropy > upper_one_sd:
-          to_return[row][col] = self.colour_kernel(1)
+          # to_return[row][col] = img_mat[row][col]
+          to_return[row][col] = self.colour_transform(1)
     
     return to_return
 
@@ -181,3 +188,21 @@ class EdgeDetection:
       entropy += p * math.log(p)
     
     return -entropy
+
+  def combine_img_mats(self, img_mats, ROWS = None, COLS = None):
+    if not ROWS or not COLS:
+      for key in img_mats:
+        img_mat = img_mats[key]
+        ROWS = len(img_mat)
+        COLS = len(img_mat[0])
+        break
+    
+    to_return = [[0 for p in range(ROWS)] for q in range(COLS)]
+
+    # for key in img_mats:
+    #   img_mat = img_mats[key]
+    #   for row in range(ROWS):
+    #     for col in range(COLS):
+          
+    
+    pass

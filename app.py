@@ -1,4 +1,8 @@
 import math
+import os
+
+import numpy as np
+
 from processing.image_processing import ImageIO
 from processing.edge_processing import EdgeDetection
 from processing.model import Model
@@ -23,51 +27,60 @@ from processing.model import Model
 # ImageSaver().save(trained_img_mat, "new_colourful")
 # print("Task completed")
 
+# # # # # # # # # # #
+#   START OF FILE   #
+# # # # # # # # # # #
 
-# path = 'assets/colourful.jpg'
-path = 'assets/el.png'
-io = ImageIO(path.split('.')[1])
+
+# declare paths
+path = 'assets/'
+outpath = 'output/'
+filename = 'spaceman.jpg'
+filepath = path + filename
+filename_split = filepath.split('.')
+name = filename_split[0]
+ext = filename_split[1]
+
+# reclare outpath
+outpath = outpath + name + '/'
+entropypath = outpath + 'entropy/'
+
+# handle directories
+# main directory
+if not os.path.exists(outpath):
+  os.makedirs(outpath)
+
+# handle entropy directory
+if not os.path.exists(entropypath):
+  os.makedirs(entropypath)
+
+# declare objects
+io = ImageIO(ext)
 e = EdgeDetection()
 
-split_factor = 2
-# img_mat0 = ir.load(path)
-# img_mat = io.load_quantised(path, 8)
-img_mat = io.load_recursive_quantised(path, 24, 6)
-# img_mat = e.apply_even_smoothing(img_mat, 1)
-# img_mat = e.keep_bright(img_mat, 0.5)
+# load and resize original image
+img_mat = io.load_recursive_quantised(filepath, 24, 12)
+# entropy_map = e.detect_edges()
 
-io.save(img_mat, "new_image")
+# save entropy layers
+entropy_mats = {}
+entropy_maps = {}
+for kradius in range(1,4):
+  # for cutoff in np.arange(-4, 4.1, 0.5):
+  if kradius not in entropy_maps:
+    entropy_maps[kradius] = e.detect_edges(img_mat, kradius)
+  entropy_map = entropy_maps[kradius]
+  entropy_mat = e.generate_binary_edges_heatmap(img_mat, entropy_map, kradius, 0)
+  entropy_mats[kradius] = entropy_mat
+  io.save(entropy_mat, "kradius" + str(kradius) , path=entropypath)
+  # entropy_layers.append(entropy_mat)
 
-# # img_mat = [[0,0,0,0,0], [1,1,1,1,1], [2,2,2,2,2], [3,3,3,3,3], [4,4,4,4,4]]
-# # rcpair = [4,4]
-# # k = 2
-# # rad = e.get_k_radius(img_mat, rcpair, k)
-# # print(rad)
+for key in entropy_mats:
+  entropy_mat = entropy_mats[key]
+  io.save(entropy_mat, "kradius" + str(key), path=entropypath)
 
-# detected = e.detect_edges(img_mat, 2)
-img_mat = e.generate_binary_edges_heatmap(img_mat, 2, 1)
-repeats = 5
-for i in range(repeats):
-  img_mat = e.apply_even_smoothing(img_mat, 1)
-  img_mat = e.keep_bright(img_mat, 0.5)
-# img_mat = e.generate_binary_edges_heatmap(img_mat, 1, 3)
-# img_mat = e.apply_even_smoothing(img_mat, 1)
-# img_mat = e.keep_bright(img_mat, 0.8)
-# img_mat = e.generate_binary_edges_heatmap(img_mat, 2)
-# img_mat = e.generate_binary_edges_heatmap(img_mat, 2)
-# img_mat = e.generate_binary_edges_heatmap(img_mat, 2)
+img_mat = e.combine_img_mats(entropy_mats)
 
-# img_mat = e.generate_binary_edges_heatmap(img_mat, 2)
-
-io.save(img_mat, "entropy")
-
-# m = Model(8, entropy_heat_map)
-# m.train()
-# trained_img_mat = io.empty_matrix(len(img_mat), len(img_mat[0]))
-# for row in range(len(entropy_heat_map)):
-#   for col in range(len(entropy_heat_map[0])):
-#     prediction = m.predict(([row, col]))
-#     if (prediction != (0,0,0)): prediction = (255,255,255)
-#     trained_img_mat[row][col] = prediction
-
-# io.save(trained_img_mat, "regressed")
+# # # # # # # # # # #
+#    END OF FILE    #
+# # # # # # # # # # #
