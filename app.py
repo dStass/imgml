@@ -4,28 +4,9 @@ import os
 import numpy as np
 
 from processing.image_processing import ImageIO
-from processing.edge_processing import EdgeDetection
+from processing.edge_processing import EdgeDetection, EntropyEdgeDetection
 from processing.model import Model
 
-# path = 'assets/shaggy.jpeg'
-# ir = ImageReader()
-
-# split_factor = 2
-# img_mat = ir.load(path)
-
-# print("Loaded")
-# m = Model(split_factor, img_mat)
-# print("Model created")
-# m.train()
-# print("Model trained")
-# trained_img_mat = ImageReader().empty_matrix(len(img_mat), len(img_mat[0]))
-# for row in range(len(img_mat)):
-#   for col in range(len(img_mat[0])):
-#     prediction = m.predict(([row, col]))
-#     trained_img_mat[row][col] = prediction
-# print("New Image created")
-# ImageSaver().save(trained_img_mat, "new_colourful")
-# print("Task completed")
 
 # # # # # # # # # # #
 #   START OF FILE   #
@@ -56,30 +37,39 @@ if not os.path.exists(entropypath):
 
 # declare objects
 io = ImageIO(ext)
-e = EdgeDetection()
+e = EntropyEdgeDetection()
 
-# load and resize original image
-img_mat = io.load_recursive_quantised(filepath, 24, 12)
-# entropy_map = e.detect_edges()
+
+START_BINS = 24
+END_BINS = 6
+STEP_BINS = 6
+
+PREV_BINS = START_BINS
 
 # save entropy layers
 entropy_mats = {}
-entropy_maps = {}
-for kradius in range(1,4):
-  # for cutoff in np.arange(-4, 4.1, 0.5):
-  if kradius not in entropy_maps:
-    entropy_maps[kradius] = e.detect_edges(img_mat, kradius)
-  entropy_map = entropy_maps[kradius]
-  entropy_mat = e.generate_binary_edges_heatmap(img_mat, entropy_map, kradius, 0)
-  entropy_mats[kradius] = entropy_mat
-  io.save(entropy_mat, "kradius" + str(kradius) , path=entropypath)
-  # entropy_layers.append(entropy_mat)
+for end_bins in range(START_BINS, END_BINS - 1, -STEP_BINS):
+  # load and resize original image
+  img_mat = io.load_recursive_quantised(filepath, PREV_BINS, END_BINS, True)
+  io.save(img_mat, "loaded_img" + str(PREV_BINS) + '_' + str(end_bins), path=outpath)
+  PREV_BINS -= STEP_BINS
+
+  for kradius in range(1,4):
+    entropy_map = e.detect_edges(img_mat, kradius)
+    entropy_mat = e.generate_binary_edges_heatmap(img_mat, entropy_map, kradius, 0)
+
+    mat_key = 'bins' + str(end_bins) + '_kradius' + str(kradius)
+    entropy_mats[mat_key] = entropy_mat
+
+    # io.save(entropy_mat, "kradius" + str(kradius) + "_bins" + str(end_bins), path=entropypath)
 
 for key in entropy_mats:
   entropy_mat = entropy_mats[key]
-  io.save(entropy_mat, "kradius" + str(key), path=entropypath)
+  io.save(entropy_mat, str(key), path=entropypath)
 
-img_mat = e.combine_img_mats(entropy_mats)
+print(entropy_mats)
+final_mat = e.combine_img_mats(entropy_mats)
+io.save(final_mat, "FINAL", path=outpath)
 
 # # # # # # # # # # #
 #    END OF FILE    #
