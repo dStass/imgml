@@ -2,6 +2,7 @@ import math
 import numpy as np
 from scipy import ndimage as ndi
 from skimage import feature
+import cv2
 
 
 class EdgeDetection:
@@ -67,17 +68,20 @@ class EdgeDetection:
         for radius_row in range(len(radius)):
           for radius_col in range(len(radius[0])):
             rad_rgb = radius[radius_row][radius_col]
-            if not rad_rgb: continue
-            average_colour[0] += rad_rgb[0]
-            average_colour[1] += rad_rgb[1]
-            average_colour[2] += rad_rgb[2]
-            total_colours += 1
+            if rad_rgb:
+              average_colour[0] += rad_rgb[0]
+              average_colour[1] += rad_rgb[1]
+              average_colour[2] += rad_rgb[2]
+              total_colours += 1
         
         # get average
-        average_colour[0] = int(average_colour[0]/total_colours)
-        average_colour[1] = int(average_colour[1]/total_colours)
-        average_colour[2] = int(average_colour[2]/total_colours)
-
+        # average_colour[0] = float(average_colour[0])/float(total_colours)
+        # average_colour[1] = float(average_colour[1])/float(total_colours)
+        # average_colour[2] = float(average_colour[2])/float(total_colours)
+        if sum(average_colour) != 0:
+          average_colour = [255,255,255]
+        else:
+          average_colour = [0,0,0]
         # update to_return
         to_return[row][col] = tuple(average_colour)
     return to_return
@@ -117,11 +121,13 @@ class EntropyEdgeDetection(EdgeDetection):
   def __init__(self):
     pass
 
-  def generate_binary_edges_heatmap(self, img_mat, entropy_map = None, k_radius=2, z_val=1):
+  def generate_binary_edges_heatmap(self, im, entropy_map = None, k_radius=2, z_val=1):
     """
 
 
     """
+    img_mat = [[tuple(c) for c in r] for r in im.tolist()]
+
     if not entropy_map:
       entropy_map = self.detect_edges(img_mat, k_radius)
     rows = len(entropy_map)
@@ -146,7 +152,7 @@ class EntropyEdgeDetection(EdgeDetection):
     variance = var_running_sum / (entropy_count - 1)
     sd = math.sqrt(variance)
 
-    # z_val = -0.2
+    z_val = -1
     upper_one_sd = entropy_mean + z_val * (sd / math.sqrt(entropy_count))
     to_return = [[(0,0,0) for _ in r] for r in entropy_map]
     for row in range(rows):
@@ -156,7 +162,7 @@ class EntropyEdgeDetection(EdgeDetection):
           # to_return[row][col] = img_mat[row][col]
           to_return[row][col] = self.colour_transform(1)
     
-    return to_return
+    return np.array(to_return).astype('uint8')
 
   def entropy_img(self, img_mat):
     """
@@ -178,12 +184,15 @@ class EntropyEdgeDetection(EdgeDetection):
         total += 1
     
     # calculate total entropy
+    if len(buckets) == 1: return 0
     for b in buckets:
       count = buckets[b]
       p = count / total
       entropy += p * math.log(p)
     
-    return -entropy
+    entropy = -entropy
+    return(min(1.0, entropy))
+
 
 
   def detect_edges(self, img_mat, k_radius=2):
@@ -206,4 +215,40 @@ class CannyEdgeDetection(EdgeDetection):
   def __init__(self):
     pass
 
-  
+
+  def transform_greyscale(self, rgb_tup):
+    """
+    using rgb transformation numbers from 
+    https://scikit-image.org/docs/stable/auto_examples/color_exposure/plot_rgb_to_gray.html
+    """
+
+    r = rgb_tup[0]
+    g = rgb_tup[1]
+    b = rgb_tup[2]
+
+    y = 0.2125*r + 0.7154*g + 0.0721*b
+
+    y = int(y)
+
+    return [y, y, y]
+
+  def generate_edges(self, image):
+    img_mat = [[self.transform_greyscale(c) for c in r] for r in image.tolist()]
+    # img_mat = self.apply_even_smoothing(img_mat,2)
+    # ROWS = len(img_mat)
+    # COLS = len(img_mat[0])
+
+    # # for row in range(ROWS):
+    # #   for col in range(COLS):
+    # #     if img_mat[row][col] != (0,0,0):
+    # #       img_mat[row][col] == (255,255,255)
+
+    # image = np.array(img_mat).astype('uint8')
+    image = cv2.Canny(image, 245, 255)
+    image = np.array([[[c, c, c] for c in r] for r in image.tolist()]).astype('uint8')
+    # img_mat = [[(c*255, c*255, c*255) for c in r] for r in image.tolist()]
+    # # for row in img_mat:
+    # #   for col in 
+    # img_mat = self.apply_even_smoothing(img_mat,1)
+
+    return image

@@ -10,7 +10,8 @@ from sklearn.cluster import KMeans
 
 class ImageIO:
   MAX_RGB = 255
-  IMG_SIZE = 256
+  IM_HEIGHT = 256
+  IM_WIDTH = 256
 
   def __init__(self, ext='jpg'):
     self.extension = ext
@@ -19,18 +20,23 @@ class ImageIO:
       self.FORMAT = 'PNG'
 
   def load(self, path):
-    im = Image.open(path, 'r')
-    height, width = im.size
-    im_loaded = im.load()
+    im = io.imread(path)
+    im = resize(im, (self.IM_HEIGHT, self.IM_WIDTH), anti_aliasing=False)
+    im = self.MAX_RGB * im
 
-    to_return = self.empty_matrix(height, width)
-    for row in range(width):
-      for col in range(height):
-        colour = im_loaded[row, col]
-        to_return[row][col] = colour
-    return to_return
+    if im.shape[2] == 4:
+      im = np.delete(im, [3], axis=2)
 
-  def load_recursive_quantised(self, path, start_colours, end_colours, greyscale = False):
+    im = im.reshape((self.IM_HEIGHT, self.IM_WIDTH, 3)).astype('uint8')
+
+    # colours get inverted in the process, invert it back
+    im = np.flip(im, 2)
+
+    return np.copy(im)
+
+  def load_recursive_quantised(self, path, start_colours, end_colours, step=1, greyscale = False):
+    to_return_list = []
+
     def recurse(im, curr):
       # reshape
       arr = im.reshape((-1,3))
@@ -46,28 +52,34 @@ class ImageIO:
       # apply transposition since image got transposed from original in previous step
       # reduced_transpose = np.transpose(reduced_img, [1,0,2])
 
-      if curr == end_colours:
-        # return in desired format
-        return reduced_img
-
-      else:
-        return recurse(reduced_img, curr - 1)
+      to_return_list.append(np.copy(reduced_img))
+      if curr - step >= end_colours:
+        recurse(reduced_img, curr - step)
     
     im = io.imread(path)
-    im = resize(im, (self.IMG_SIZE, self.IMG_SIZE), anti_aliasing=False)
+    im = resize(im, (self.IM_HEIGHT, self.IM_WIDTH), anti_aliasing=False)
     im = self.MAX_RGB * im
     
     # remove alpha value
     if im.shape[2] == 4:
       im = np.delete(im, [3], axis=2)
+
+    # add original image
+    im = np.flip(im, 2)
+    to_return_list.append(np.copy(im).astype('uint8'))
+    recurse(im, start_colours)
+
+    # if start_colours%2 == end_colours%2:
+    #   for i in range(len(to_return_list)):
+    #     to_return_list[i] = np.transpose(to_return_list[i], [1,0,2])
     
-    to_return = recurse(im, start_colours)
+    return to_return_list
 
     # transpose once    
-    to_return = np.transpose(to_return, [1,0,2])
+    # to_return = np.transpose(to_return, [1,0,2])
 
-    to_return = [[self.transform_greyscale(r) if greyscale else tuple(r) for r in l] for l in to_return.tolist()]
-    return to_return
+    # to_return = [[self.transform_greyscale(r) if greyscale else tuple(r) for r in l] for l in to_return.tolist()]
+    # return to_return
 
   def load_quantised(self, path, num_colours = -1):
     """
@@ -100,7 +112,7 @@ class ImageIO:
 
   def transform_greyscale(self, rgb_tup):
     """
-    using rgb transformation from 
+    using rgb transformation numbers from 
     https://scikit-image.org/docs/stable/auto_examples/color_exposure/plot_rgb_to_gray.html
     """
 
@@ -140,6 +152,9 @@ class ImageIO:
 
   def empty_matrix(self, height, width):
     return [[0 for w in range(width)] for h in range(height)]
+
+  def empty_matrix_np(self, height, width):
+    return np.array([[0 for w in range(width)] for h in range(height)])
 
   def save(self, img_mat, name, path=''):
     ROW, COL = len(img_mat), len(img_mat[0])
