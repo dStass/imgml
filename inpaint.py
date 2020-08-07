@@ -9,10 +9,11 @@ from processing.image_processing import ImageIO
 
 
 def normalised(nparr):
-  norm = np.linalg.norm(nparr)
-  return nparr / norm
+  # norm = np.linalg.norm(nparr)
+  max_val = np.amax(nparr)
+  return nparr / max_val
 
-IMG_PATH = 'assets/spaceman.jpg'
+IMG_PATH = 'assets/grass.jpg'
 
 ext = IMG_PATH.split('.')[1]
 io = ImageIO(ext)
@@ -32,6 +33,16 @@ t0 = time.time()
 
 # img = np.true_divide(img.astype('float64'), 255)
 R, G, B = cv2.split(img)
+
+R = R.astype('float64')
+G = G.astype('float64')
+B = B.astype('float64')
+
+R *= (1/255)
+G *= (1/255)
+B *= (1/255)
+
+eps = 0.005
 
 channels = {
   'B' : {
@@ -75,46 +86,64 @@ for n in range(1, N+1):
     # part C of equation
 
     # find partial gradients
-    _I_x = ndimage.sobel(_I_n,axis=0,mode='constant')
-    _I_xx = ndimage.sobel(_I_x,axis=0,mode='constant')
+    # _I_x = ndimage.sobel(_I_n,axis=0,mode='constant')
+    _I_x = np.roll(_I_n, -1, axis=0)
+    # _I_xx = ndimage.sobel(_I_x,axis=0,mode='constant')
+    _I_xx = np.roll(_I_x, -1, axis=0) - 2 * _I_x * np.roll(_I_x, -1, axis=0)
 
-    _I_y = ndimage.sobel(_I_n,axis=1,mode='constant')
-    _I_yy = ndimage.sobel(_I_y,axis=1,mode='constant')
+    # _I_y = ndimage.sobel(_I_n,axis=1,mode='constant')
+    _I_y = np.roll(_I_n, -1, axis=1)
+    # _I_yy = ndimage.sobel(_I_y,axis=1,mode='constant')
+    _I_yy = np.roll(_I_y, -1, axis=1) - 2 * _I_y * np.roll(_I_y, -1, axis=1)
 
-    _I_xy = ndimage.sobel(_I_x,axis=1,mode='constant')
+    _I_xy = 0.5 * (np.roll(_I_x, -1, axis=1) - np.roll(_I_x, 1, axis=1))
+    # _I_xy = ndimage.sobel(_I_x,axis=1,mode='constant')
 
     _I_x_sq = _I_x * _I_x
-    _I_x_mat = np.matrix(_I_x_sq)
+    # _I_x_mat = np.matrix(_I_x_sq)
     _I_y_sq = _I_y * _I_y
 
 
     _C_numerator = _I_xx * _I_y_sq + _I_yy * _I_x_sq - 2 * _I_x * _I_y * _I_xy
-    _C_denominator = np.power(_I_x_sq + _I_y_sq, 3/2)
+    _C_denominator = np.power(eps + _I_x_sq + _I_y_sq, 3/2)
 
     _C = _T * _C_numerator / _C_denominator
 
-    _C[np.isnan(_C)] = 0
+    # _C[np.isnan(_C)] = 0
 
     _I_n_plus_1 = _A + _B + _C
 
     _I_n = _I_n_plus_1
-    _I_n[_I_n < 0] = 0
-    # _I_n += np.amin(_I_n)
-    # _I_n = normalised(_I_n) * 255
-    _I_n[_I_n > 255] = 255
+    # _I_n[_I_n < 0] = 0
+    if np.amin(_I_n) < 0:
+      _I_n -= np.amin(_I_n)
+    _I_n = normalised(_I_n) * 1
+    # _I_n[_I_n > 1] = 1
 
     channel_dict['_I_n'] = _I_n
 
-    if n % 100 == 1:
+    if n % 10 == 1:
       if len(channel_aggregate) == 3:
         # add 
         _I_n_B = channels['B']['_I_n']
         _I_n_G = channels['G']['_I_n']
         _I_n_R = channels['R']['_I_n']
 
+        # _I_n_R -= np.amin(_I_n_R) if np.amin(_I_n_R) < 0 else 0         
+        # _I_n_G -= np.amin(_I_n_G) if np.amin(_I_n_G) < 0 else 0
+        # _I_n_B -= np.amin(_I_n_B) if np.amin(_I_n_B) < 0 else 0
+
+        # _I_n_R[_I_n_R < 0] = 0
+        # _I_n_G[_I_n_G < 0] = 0        
+        # _I_n_B[_I_n_B < 0] = 0
+
+        _I_n_R = normalised(_I_n_R)        
+        _I_n_G = normalised(_I_n_G)
+        _I_n_B = normalised(_I_n_B)
+
 
         # stack RGB
-        stacked_channels = np.dstack((_I_n_R, _I_n_G, _I_n_B)).astype('uint8')
+        stacked_channels = np.dstack((_I_n_R * 255, _I_n_G * 255, _I_n_B * 255)).astype('uint8')
 
         saved_plots.append(stacked_channels)
 
@@ -133,6 +162,7 @@ for n in range(1, N+1):
     # plt.show()
 
 for saved_plot in saved_plots[::-1]:
+# for saved_plot in saved_plots:
   plt.imshow(saved_plot)
   plt.show()
 

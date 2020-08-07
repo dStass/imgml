@@ -10,8 +10,8 @@ from sklearn.cluster import KMeans
 
 class ImageIO:
   MAX_RGB = 255
-  IM_HEIGHT = 512
-  IM_WIDTH = 512
+  IM_HEIGHT = 256
+  IM_WIDTH = 256
 
   def __init__(self, ext='jpg'):
     self.extension = ext
