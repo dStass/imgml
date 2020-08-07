@@ -2,8 +2,6 @@ import numpy as np
 
 class ImageInpainter:
 
-
-
   def __init__(self):
     pass
 
