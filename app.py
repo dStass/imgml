@@ -76,9 +76,6 @@ def mouse_callback(event, x, y, flags, param):
 
   elif event == cv2.EVENT_LBUTTONUP:
     mouse_pressed = False
-    # current_display
-    # image_to_show = ImageInpainter().fill_image(current_display[current_image_index], loaded_edges[current_image_index], (y, x), MOUSE_RADIUS, BLACK_COLOUR, FILL_COLOUR)
-
 
   mouse_x = x
   mouse_y = y

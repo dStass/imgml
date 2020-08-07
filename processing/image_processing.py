@@ -10,8 +10,8 @@ from sklearn.cluster import KMeans
 
 class ImageIO:
   MAX_RGB = 255
-  IM_HEIGHT = 256
-  IM_WIDTH = 256
+  IM_HEIGHT = 512
+  IM_WIDTH = 512
 
   def __init__(self, ext='jpg'):
     self.extension = ext
@@ -65,7 +65,7 @@ class ImageIO:
       im = np.delete(im, [3], axis=2)
 
     # add original image
-    im = np.flip(im, 2)
+    # im = np.flip(im, 2)
     to_return_list.append(np.copy(im).astype('uint8'))
     recurse(im, start_colours)
 
