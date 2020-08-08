@@ -95,7 +95,7 @@ mask = mask_np.tolist()
 
 PATCH_SIZE = 7
 num_patch_elements = PATCH_SIZE * PATCH_SIZE
-RESET_RATE = 0.005
+RESET_RATE = 0.20
 
 # contained information
 patch_to_coordinates = {}
@@ -164,17 +164,18 @@ importance = get_important_patches(to_fill, mask, coordinates_to_patch, patch_to
 # full_patch_to_coordinates = {patch_to_coordinates[c] for c in patch_to_coordinates if c not in partial_patch_to_coordinates}
 
 reset_heap_every = int(RESET_RATE * len(to_fill))
+# reset_heap_every = 1
 
 last_reset = len(to_fill)
 # traverse to_fill
 steps = 0
 while to_fill:
   steps += 1
-  if steps == 3250:
+  if steps == 3100:
     print()
   if steps == 3300:
     print()
-  if len(to_fill) - last_reset > reset_heap_every:
+  if last_reset - len(to_fill) > reset_heap_every:
     last_reset = len(to_fill)
     importance = get_important_patches(to_fill, mask, coordinates_to_patch, patch_to_coordinates, partial_patch_to_coordinates, edges, num_patch_elements)
   # find most important patch
@@ -191,7 +192,8 @@ while to_fill:
 
   # fill coordinates
   for coordinates in fill_patch:
-    img[coordinates[0]][coordinates[1]] = [255, 0, 0]    
+    img[coordinates[0]][coordinates[1]] = [255, 0, 0]
+    mask[coordinates[0]][coordinates[1]] = MASK_NONE
 
   # remove coordinates that have been filled
   to_remove = set()
@@ -212,7 +214,7 @@ while to_fill:
   img[coordinates[0]][coordinates[1]]
   print("len=", len(to_fill))
   
-  if steps % 200 == 0:
+  if steps % 50 == 0 or len(to_fill) == 0:
     # plt.imshow(np.array(mask))
     # plt.show()
     io.save(img, OUT_NAME + str(steps), OUT_FOLDER, True)
