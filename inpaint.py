@@ -84,6 +84,8 @@ for n in range(1, N+1):
     _B = _T * _lambda * (_I_0 - _I_n)
 
     # part C of equation
+
+    # spatial gradients
     _I_x = 0.5 * (np.roll(_I_n, -1, axis=1) - np.roll(_I_n, 1, axis=1))
     _I_xx = np.roll(_I_n, -1, axis=1) - 2 * _I_n * np.roll(_I_n, 1, axis=1)
     _I_y = 0.5 * (np.roll(_I_n, -1, axis=0) - np.roll(_I_n, 1, axis=0))

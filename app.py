@@ -7,38 +7,47 @@ import os
 
 import numpy as np
 import cv2
+import matplotlib.pyplot as plt
 
 from processing.image_processing import ImageIO
 from processing.edge_processing import EdgeDetection, EntropyEdgeDetection, CannyEdgeDetection
 from processing.model import Model
 from processing.inpaint_processing import ImageInpainter
 
+# Export settings
+OUTPUT_FOLDER = "output/"
+OUTPUT_NAME = "test"
+
+# constants
+NUM_LAYERS = 2  # layers per image
+
 # import image
 IMG_PATH = 'assets/spaceman.jpg'
-NUM_LAYERS = 2
-
 ext = IMG_PATH.split('.')[1]
 io = ImageIO(ext)
-
 loaded_images = io.load_recursive_quantised(IMG_PATH, 20, 2, 8)
+
+# set up images and layers
 images = [[li] for li in loaded_images]
 
 for i in range(len(images)):
   layer = images[i]
   layer.append(CannyEdgeDetection().generate_edges(layer[0]))
 
+NUM_LAYERS = len(images[0])
 
 # display settings
 image_index = 0
 layer_index = 0
-
 current_layers = [np.copy(l) for l in images[image_index]]
 current_display = current_layers[layer_index]
+current_mask = np.zeros((loaded_images[0].shape)).astype('uint8')
 
 # cursor settings
 show_edges_bool = False
 FILL_COLOUR = (212, 12, 243)
-BLACK_COLOUR = (0,0,0)
+BLACK_COLOUR = (0, 0, 0)
+WHITE_COLOUR = (255, 255, 255)
 MOUSE_RADIUS = 6
 MOUSE_ALPHA = 0.7
 mouse_pressed = False
@@ -57,6 +66,12 @@ def mouse_callback(event, x, y, flags, param):
       # image_to_show = cv2.addWeighted(overlay, alpha_value, image_to_show, 1 - alpha_value, 0)
       current_layers[i] = cv2.addWeighted(overlay, alpha_value, layer, 1 - alpha_value, 0)
       current_display = current_layers[i]
+    
+    # update mask
+    global current_mask
+    overlay = current_mask.copy()
+    cv2.circle(overlay, (x,y), MOUSE_RADIUS, WHITE_COLOUR, -1)
+    current_mask = cv2.addWeighted(overlay, alpha_value, current_mask, 1 - alpha_value, 0).astype('uint8')
 
   global current_display, mouse_pressed, mouse_x, mouse_y
 
@@ -85,7 +100,8 @@ cv2.setMouseCallback('image', mouse_callback)
 
 
 while True:
-  cv2.imshow('image', current_display)
+  # cv2.imshow('image', np.flip(current_mask, 2))
+  cv2.imshow('image', np.flip(current_display, 2))
   k = cv2.waitKey(1)
 
   if k == ord('c'):
@@ -123,12 +139,14 @@ while True:
     if image_index > 0: image_index -= 1
     current_layers = [np.copy(l) for l in images[image_index]]
     current_display = current_layers[layer_index]
+    current_mask = np.zeros((loaded_images[0].shape)).astype('uint8')
   
   # cycle right
   elif k == 124 or k == ord('.'):
     if image_index < len(images) - 1: image_index += 1
     current_layers = [np.copy(l) for l in images[image_index]]
     current_display = current_layers[layer_index]
+    current_mask = np.zeros((loaded_images[0].shape)).astype('uint8')
 
   # pointer
   elif k == 45 or k == ord(']'):
@@ -141,6 +159,16 @@ while True:
   elif k == ord('r'):
     current_layers = [np.copy(l) for l in images[image_index]]
     current_display = current_layers[layer_index]
+    current_mask = np.zeros((loaded_images[0].shape)).astype('uint8')
+
+
+  # inpaint
+  elif k == ord('i'):
+    inpainter = ImageInpainter()
+    inpainter.remove_and_inpaint(OUTPUT_FOLDER, OUTPUT_NAME, images[image_index][0], current_mask)
+
+
+    pass
 
   # exit
   elif k == 27 or k == ord('q'):
