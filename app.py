@@ -22,7 +22,7 @@ OUTPUT_NAME = "test"
 NUM_LAYERS = 2  # layers per image
 
 # import image
-IMG_PATH = 'assets/spaceman.jpg'
+IMG_PATH = 'assets/car.jpg'
 ext = IMG_PATH.split('.')[1]
 io = ImageIO(ext)
 loaded_images = io.load_recursive_quantised(IMG_PATH, 20, 2, 8)

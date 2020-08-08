@@ -73,10 +73,15 @@ class ImageInpainter:
     inpaint_results = {}
     inpaint_results['mask'] = mask_np
     
-    naive_linear_np = NaiveLinearInpainter().remove_and_inpaint(folder, name, image_np, mask_np)
-    inpaint_results['naive_linear_np'] = naive_linear_np
+    # apply inpainting using naive linear inpainter
+    # naive_linear_np = NaiveLinearInpainter().remove_and_inpaint(folder, name, image_np, mask_np)
+    # inpaint_results['naive_linear_np'] = naive_linear_np
 
-    plt.imshow(naive_linear_np)
+    # apply inpainting using intermediate linear inpainter
+    intermediate_linear_np = IntermediateLinearInpainter().remove_and_inpaint(folder, name, image_np, mask_np)
+    inpaint_results['intermediate_linear_np'] = intermediate_linear_np
+
+    plt.imshow(intermediate_linear_np)
     plt.show()
     pass
 
@@ -108,6 +113,11 @@ class Inpainter:
     return [n for n in neighbours if 0 <= n[0] < nrows and 0 <= n[1] < ncols]
 
 class NaiveLinearInpainter(Inpainter):
+  """
+  Simple inpainter that extracts a single layer of pixels surrounding the masking area
+  and use them as predictors in a linear regression model
+  """
+
   def __init__(self):
     pass
 
@@ -115,13 +125,7 @@ class NaiveLinearInpainter(Inpainter):
     """
     Assumes dim(image_np) == dim(mask_np)
     """
-    print("linreg inpainting")
-
-    # plt.imshow(image_np)
-    # plt.show()
-
-    # plt.imshow(mask_np)
-    # plt.show()
+    print("nailinreg")
 
     # extract dimensions
     nrows = image_np.shape[0]
@@ -204,3 +208,157 @@ class NaiveLinearInpainter(Inpainter):
       inpainted_image[row][col] = combined_rgb
 
     return np.array(inpainted_image).astype('uint8')
+
+
+class IntermediateLinearInpainter(Inpainter):
+
+
+  def __init__(self):
+    pass
+
+  def remove_and_inpaint(self, folder, name, image_np, mask_np):
+    """
+    Assumes dim(image_np) == dim(mask_np)
+    """
+    print("intlinreg")
+
+    # extract dimensions
+    nrows = image_np.shape[0]
+    ncols = image_np.shape[1]
+
+    # convert image to python list
+    inpainted_image = np.copy(image_np).astype('uint8').tolist()
+    image = image_np.tolist()
+    mask = mask_np.tolist()
+
+    # store coordinates of pixels that are to be removed
+    to_remove = set()
+    # to_remove_rows = set()
+    # to_remove_cols = set()
+    for row in range(nrows):
+      for col in range(ncols):
+        if mask[row][col] == self.MASK_REMOVE:
+          to_remove.add((row, col))
+          # to_remove_rows.add(row)
+          # to_remove_cols.add(cols)
+
+    # gather surrounding pixel coordinates
+    # surrounding_to_remove = set()
+    local_regression_dict = {}
+
+    # row and col regressors
+    row_regressors = {}
+    col_regressors = {}
+
+    undetermined = set()
+
+    for coordinate in to_remove:
+      row = coordinate[0]
+      col = coordinate[1]
+
+      # find minrow and maxrow used for regression:
+      minrow = row - 1
+      while minrow >= 0:
+        if mask[minrow][col] != self.MASK_REMOVE: break
+        minrow -= 1
+
+      maxrow = row + 1
+      while maxrow < nrows:
+        if mask[maxrow][col] != self.MASK_REMOVE: break
+        maxrow += 1
+
+      # find mincol and maxcol used for regression:
+      mincol = col - 1
+      while mincol >= 0:
+        if mask[row][mincol] != self.MASK_REMOVE: break
+        mincol -= 1
+
+      maxcol = col + 1
+      while maxcol < ncols:
+        if mask[row][maxcol] != self.MASK_REMOVE: break
+        maxcol += 1
+
+      row_pair = (minrow, maxrow)
+      col_pair = (mincol, maxcol)
+
+      if row_pair == (-1, 256) and col_pair == (-1, 256):
+        undetermined.add((row, col))
+        continue
+
+      local_regression_dict[coordinate] = {
+        'row' : row_pair,
+        'col' : col_pair
+      }
+
+      # regression
+
+      row_models = None
+      col_models = None
+
+      # row regression, fix row
+      if col_pair != (-1, ncols):
+        Xs = []
+        channels = [[], [], []]
+
+        for c in col_pair:
+          if -1 < c < ncols:
+            Xs.append([row, c])
+            for channel in range(3):
+              channels[channel].append(image[row][c][channel])
+
+        col_models = {
+          'r' : LinearRegressionModel(np.array(Xs), np.array(channels[0])),
+          'g' : LinearRegressionModel(np.array(Xs), np.array(channels[1])),
+          'b' : LinearRegressionModel(np.array(Xs), np.array(channels[2]))
+        }
+
+        for m in col_models: col_models[m].train()
+
+      # col regression, fix col
+      if row_pair != (-1, nrows):
+        Xs = []
+        channels = [[], [], []]
+
+        for r in row_pair:
+          if -1 < r < nrows:
+            Xs.append([r, col])
+            for channel in range(3):
+              channels[channel].append(image[r][col][channel])
+
+        row_models = {
+          'r' : LinearRegressionModel(np.array(Xs), np.array(channels[0])),
+          'g' : LinearRegressionModel(np.array(Xs), np.array(channels[1])),
+          'b' : LinearRegressionModel(np.array(Xs), np.array(channels[2]))
+        }
+
+        for m in row_models: row_models[m].train()
+
+      # regress with available models
+      models_used = 0
+      models = [row_models, col_models]
+      channel_initials = ['r', 'g', 'b']
+      predictions = [0, 0, 0]
+
+      for model in models:
+        if model:
+          for i in range(len(predictions)):
+            predictions[i] += model[channel_initials[i]].predict([row, col])
+          models_used += 1
+
+      for i in range(len(predictions)):
+        pred_i = predictions[i]
+        pred_i = int(pred_i / models_used)
+        if pred_i < 0: pred_i = 0
+        elif pred_i > 255: pred_i = 255
+        predictions[i] = pred_i
+
+      inpainted_image[row][col] = predictions
+
+    inpainted_np = np.array(inpainted_image).astype('uint8')
+    if len(undetermined) > 0:
+      new_mask = np.zeros(mask_np.shape)
+      for undetermined_coordinates in undetermined:
+        new_mask[undetermined_coordinates[0]][undetermined_coordinates[1]] = np.array([255, 255, 255])
+      return IntermediateLinearInpainter().remove_and_inpaint(folder, name, inpainted_np, new_mask)
+
+    return inpainted_np
