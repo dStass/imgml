@@ -1,4 +1,5 @@
 import time
+import heapq
 
 import cv2
 import numpy as np
@@ -6,32 +7,132 @@ from scipy import ndimage
 import matplotlib.pyplot as plt
 
 from processing.image_processing import ImageIO
+from processing.edge_processing import CannyEdgeDetection
 
+# Functions
 
 def normalised(nparr):
   norm = np.linalg.norm(nparr)
   max_val = np.amax(nparr)
   return nparr / max_val
 
+def get_patch_points(patch, edges, num_patch_elements):
+  points_size = (len(patch) / num_patch_elements)
+  points_edges = 0
+  for coordinate in patch:
+    points_edges += (edges[coordinate[0]][coordinate[1]][0] * (1 / 255))
+  points_edges /= num_patch_elements
+  points = points_size + points_edges
+  return points
+
+
+# Start of program
+
 IMG_PATH = 'assets/spaceman.jpg'
+MASK_PATH = 'output/space_mask.jpg'
+MASK_INPAINT = [255, 255, 255]
+MASK_NONE = [0, 0, 0]
 
 ext = IMG_PATH.split('.')[1]
 io = ImageIO(ext)
 
-loaded_images = io.load_recursive_quantised(IMG_PATH, 20, 2, 19)
-img = loaded_images[0]
+img_np = io.load(IMG_PATH)
+edges = CannyEdgeDetection().generate_edges(img_np).tolist()
 
-
-_T = 0.2
-_lambda = 0.001
+img = img_np.tolist()
+mask = io.load(MASK_PATH).tolist()
 
 PATCH_SIZE = 7
+num_patch_elements = PATCH_SIZE * PATCH_SIZE
 
-N = 25
+# contained information
+patch_to_coordinates = {}
+partial_patch_to_coordinates = {}  # contains non-mask pixels only
+coordinates_to_patch = {}
+to_fill = set()
 
-t0 = time.time()
+# choosing the importance of which point to fill
+# format -> (no. surrounding unmasked, edge point, heap_operation_count, ..)
+importance = []
 
-# img = np.true_divide(img.astype('float64'), 255)
+patch_no = 0
+heap_operation_count = 0  # used for heap operation to maintain stability
+
+# build patches 
+# iterate over array
+nrows = len(img)
+ncols = len(img[0])
+for row in range(nrows - PATCH_SIZE):
+  for col in range(ncols - PATCH_SIZE):
+    patch_to_coordinates[patch_no] = set()
+    partial_patch_to_coordinates[patch_no] = set()
+    # patch_to_importance = 0
+
+    # iterate over PATCH_SIZE x PATCH_SIZE window
+    for prow in range(PATCH_SIZE):
+      for pcol in range(PATCH_SIZE):
+
+        # sum (trow = total row, tcol = total col)
+        trow = row + prow
+        tcol = col + pcol
+        coordinates = (trow, tcol)
+
+        patch_to_coordinates[patch_no].add(coordinates)
+
+        # only add point to partial map if it is a black pixel
+        if mask[trow][tcol] != MASK_INPAINT: partial_patch_to_coordinates[patch_no].add(coordinates)
+        else: to_fill.add(coordinates)        
+        
+        # build patch information into dicts
+        if coordinates not in coordinates_to_patch: coordinates_to_patch[coordinates] = set()
+        coordinates_to_patch[coordinates].add(patch_no)
+
+     # increment patch
+    patch_no += 1
+
+# calculate initial importance
+for fill_coordinates in to_fill:
+  patches_in = coordinates_to_patch[fill_coordinates]
+  best_patch_points = -1
+  best_patch_id = None
+  for patch_id in patches_in:
+    partial_patch = partial_patch_to_coordinates[patch_id]
+    patch_points = get_patch_points(partial_patch, edges, num_patch_elements)
+    if patch_points > best_patch_points:
+      best_patch_points = patch_points
+      best_patch_id = patch_id
+
+  # use a heap as a queue to maintain importance of a particular point
+  heapq.heappush(importance, (-best_patch_points, heap_operation_count, fill_coordinates, best_patch_id))
+  heap_operation_count += 1
+
+# deduce patches that are full (we only use these OR partial patches to fill)
+full_patch_to_coordinates = {patch_to_coordinates[c] for c in patch_to_coordinates if c not in partial_patch_to_coordinates}
+
+# traverse to_fill
+while to_fill:
+
+  # extract info
+  to_explore = heapq.heappop(importance)
+  fill_coordinates = to_explore[2]
+  patch_id = to_explore[3]
+
+  # remove current coordinate from what we need to fill
+  to_fill.remove(fill_coordinates)
+
+  # this is the patch we will use
+  identified_patch = patch_to_coordinates[patch_id]
+  partial_patch = partial_patch_to_coordinates[patch_id]
+
+  # deduce coordinates that need filling
+  fill_patch = {c for c in identified_patch if c not in partial_patch}
+
+  print()
+
+
+for tups in importance:
+  print("points=", tups[0], "ncount=", len( partial_patch_to_coordinates[tups[3]] )) 
+
 R, G, B = cv2.split(img)
 
 R = R.astype('float64')
@@ -43,154 +144,3 @@ G *= (1/255)
 B *= (1/255)
 
 eps = 0.00000000005
-
-channels = {
-  'B' : {
-    '_I_0' : np.copy(B),
-    '_I_n' : np.copy(B)
-  },
-  'G' : {
-    '_I_0' : np.copy(G),
-    '_I_n' : np.copy(G)
-  },
-  'R' : {
-    '_I_0' : np.copy(R),
-    '_I_n' : np.copy(R)
-  },
-
-}
-
-# _I_0 = np.copy(g)
-# _I_n = np.copy(_I_0)
-
-saved_gif = []
-saved_plots = []
-channel_aggregate = []
-
-# start iteration
-for n in range(1, N+1):
-
-  for channel in channels:
-
-    # unpack info
-    channel_dict = channels[channel]
-    _I_0 = channel_dict['_I_0']
-    _I_n = channel_dict['_I_n']
-
-    # part A of equation
-    _A = np.copy(_I_n)
-
-    # part B of equation
-    _B = _T * _lambda * (_I_0 - _I_n)
-
-    # part C of equation
-
-    # spatial gradients
-    _I_x = 0.5 * (np.roll(_I_n, -1, axis=1) - np.roll(_I_n, 1, axis=1))
-    _I_xx = np.roll(_I_n, -1, axis=1) - 2 * _I_n * np.roll(_I_n, 1, axis=1)
-    _I_y = 0.5 * (np.roll(_I_n, -1, axis=0) - np.roll(_I_n, 1, axis=0))
-    _I_yy = np.roll(_I_n, -1, axis=0) - 2 * _I_n * np.roll(_I_n, 1, axis=0)
-    _I_xy = 0.5 * (np.roll(_I_x, -1, axis=0) - np.roll(_I_x, 1, axis=0))
-
-
-    _I_x_sq = _I_x * _I_x
-    # _I_x_mat = np.matrix(_I_x_sq)
-    _I_y_sq = _I_y * _I_y
-
-    # plt.imshow(_I_x_sq)
-    # plt.show()
-
-    _C_numerator = _I_xx * _I_y_sq + _I_yy * _I_x_sq - 2 * _I_x * _I_y * _I_xy
-    _C_denominator = np.power(eps + _I_x_sq + _I_y_sq, 3/2)
-
-    _C = _T * _C_numerator / _C_denominator
-
-    # _C[np.isnan(_C)] = 0
-
-    _I_n_plus_1 = _A + _B + _C
-
-    _I_n = _I_n_plus_1
-    # _I_n[_I_n < 0] = 0
-    # if np.amin(_I_n) < 0:
-    #   _I_n -= np.amin(_I_n)
-    # # _I_n[_I_n > 1] = 1
-    # _I_n = normalised(_I_n) * 1
-
-    channel_dict['_I_n'] = _I_n
-
-    if n % 1 == 0:
-      if len(channel_aggregate) == 3:
-        # add 
-        _I_n_B = channels['B']['_I_n']
-        _I_n_G = channels['G']['_I_n']
-        _I_n_R = channels['R']['_I_n']
-
-        _I_n_R -= np.amin(_I_n_R) if np.amin(_I_n_R) < 0 else 0         
-        _I_n_G -= np.amin(_I_n_G) if np.amin(_I_n_G) < 0 else 0
-        _I_n_B -= np.amin(_I_n_B) if np.amin(_I_n_B) < 0 else 0
-
-        # _I_n_R[_I_n_R < 0] = 0
-        # _I_n_G[_I_n_G < 0] = 0        
-        # _I_n_B[_I_n_B < 0] = 0
-
-        _I_n_R = normalised(_I_n_R)        
-        _I_n_G = normalised(_I_n_G)
-        _I_n_B = normalised(_I_n_B)
-
-
-        # stack RGB
-        stacked_channels = np.dstack((_I_n_R * 255, _I_n_G * 255, _I_n_B * 255)).astype('uint8')
-
-        saved_plots.append(stacked_channels)
-
-        # reset
-        channel_aggregate = []
-
-      else:
-        channel_aggregate.append(_I_n)
-
-      # b, g, r = cv2.split(_I_n.astype(int))
-      # b2 = np.insert(b, 0, [0, 0])
-      # saved_plots.append(_I_n)
-
-      # plt.subplot(_I_n)
-    # plt.imshow(_I_n)
-    # plt.show()
-
-for saved_plot in saved_plots[::-1]:
-# for saved_plot in saved_plots:
-  plt.imshow(saved_plot)
-  plt.show()
-
-
-  img_mat = img.tolist()
-  saved_plot_mat = saved_plot.tolist()
-
-  for row in range(len(img_mat)):
-    for col in range(len(img_mat[0])):
-      for channel in range(3):
-        img_mat[row][col][channel] -= saved_plot_mat[row][col][channel]
-        img_mat[row][col][channel] = max(0, img_mat[row][col][channel])
-  
-
-
-  difference = np.array(img_mat)
-  # print(ndifference))
-  plt.imshow(difference)
-  plt.show()
-
-# difference = img - saved_plots[0]
-
-print("Time taken = ", time.time() - t0)
-
-
-
-
-
-# # Get x-gradient in "sx"
-# sx = ndimage.sobel(img,axis=0,mode='constant')
-# # Get y-gradient in "sy"
-# sy = ndimage.sobel(img,axis=1,mode='constant')
-# # plt.imshow(ndimage.sobel(sx,axis=0,mode='constant'))
-# plt.imshow(sy)
-# plt.show()

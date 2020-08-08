@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from processing.model import LinearRegressionModel
+from processing.image_processing import ImageIO
 
 class ImageInpainter:
   def __init__(self):
@@ -70,12 +71,18 @@ class ImageInpainter:
     return np.array(current_mat).astype('uint8')
 
   def remove_and_inpaint(self, folder, name, image_np, mask_np):
+    io = ImageIO()
     inpaint_results = {}
     inpaint_results['mask'] = mask_np
+    # save mask
+    io.save(mask_np.tolist(), name + '_mask', folder, True)
     
     # apply inpainting using naive linear inpainter
-    # naive_linear_np = NaiveLinearInpainter().remove_and_inpaint(folder, name, image_np, mask_np)
-    # inpaint_results['naive_linear_np'] = naive_linear_np
+    naive_linear_np = NaiveLinearInpainter().remove_and_inpaint(folder, name, image_np, mask_np)
+    inpaint_results['naive_linear_np'] = naive_linear_np
+
+    plt.imshow(naive_linear_np)
+    plt.show()
 
     # apply inpainting using intermediate linear inpainter
     intermediate_linear_np = IntermediateLinearInpainter().remove_and_inpaint(folder, name, image_np, mask_np)

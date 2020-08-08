@@ -16,7 +16,7 @@ from processing.inpaint_processing import ImageInpainter
 
 # Export settings
 OUTPUT_FOLDER = "output/"
-OUTPUT_NAME = "test"
+OUTPUT_NAME = "car"
 
 # constants
 NUM_LAYERS = 2  # layers per image

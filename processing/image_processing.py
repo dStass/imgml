@@ -30,7 +30,7 @@ class ImageIO:
     im = im.reshape((self.IM_HEIGHT, self.IM_WIDTH, 3)).astype('uint8')
 
     # colours get inverted in the process, invert it back
-    im = np.flip(im, 2)
+    # im = np.flip(im, 2)
 
     return np.copy(im)
 
@@ -156,11 +156,11 @@ class ImageIO:
   def empty_matrix_np(self, height, width):
     return np.array([[0 for w in range(width)] for h in range(height)])
 
-  def save(self, img_mat, name, path=''):
+  def save(self, img_mat, name, path='', transpose=False):
     ROW, COL = len(img_mat), len(img_mat[0])
     to_save = Image.new('RGB', (ROW, COL))
     to_save_loaded = to_save.load()
     for row in range(ROW):
       for col in range(COL):
-        to_save_loaded[row, col] = tuple([int(c) for c in img_mat[row][col]])
-    to_save.save(path + name + '.' + self.extension, self.FORMAT, optimize=True)
+        to_save_loaded[row, col] = tuple([int(c) for c in img_mat[col if transpose else row][row if transpose else col]])
+    to_save.save(path + name + '.' + self.extension, self.FORMAT, optimize=False)
