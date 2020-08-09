@@ -2,9 +2,9 @@
 /__pycache__/*
 /.vscode/*
 /assets/*
+/output/*
 
 # files
 *.pyc
-*.jpg
 *.png
 .DS_Store
