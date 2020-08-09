@@ -12,19 +12,20 @@ from processing.edge_processing import CannyEdgeDetection
 # Functions
 
 def get_neighbours(coordinates, img):
+  """
+  get surrounding neighbours to a (r, c) pair in a given img
+  handles extreme image edge cases
+  """
   nrows = len(img)
   ncols = len(img[0])
-
   r = coordinates[0]
   c = coordinates[1]
-
   to_return = [
     [r - 1, c],
     [r + 1, c],
     [r, c - 1],
     [r, c + 1]
   ]
-
   return [t for t in to_return if 0 <= t[0] < nrows and 0 <= t[1] < ncols]
 
 def normalised(nparr):
@@ -37,7 +38,7 @@ def get_patch_points(patch, mask, edges, num_patch_elements):
   Returns 2 things:
   1. points_size = number of "black" pixels in mask (or unmasked pixels)
      -> synonynomous to pixels that exist that we can extrapolate from
-  2. points_edtes = sum of how many "white" pixels in edges image
+  2. points_edges = sum of how many "white" pixels in edges image
      -> as edges and corners are white, we can use this as a guide to
         measure importance of a patch
 
@@ -54,7 +55,19 @@ def get_patch_points(patch, mask, edges, num_patch_elements):
   points_size
   return (points_size, points_edges)
 
+def get_patch_masked_num(patch, mask):
+  """
+  Returns number of unmasked pixels
+  """
+  unmasked = 0
+  for coordinate in patch:
+    if mask[coordinate[0]][coordinate[1]] != MASK_NONE: unmasked += 1
+  return unmasked
+
 def get_important_patches(to_fill, mask, coordinates_to_patch, patch_to_coordinates, edges, num_patch_elements):
+  """
+  traverses to_fill (points that needs to be inpainted)
+  """
   to_return = []
   operation_count = 0
 
@@ -94,6 +107,9 @@ def get_important_patches(to_fill, mask, coordinates_to_patch, patch_to_coordina
 
   return to_return
 
+def get_similar_patch(identified_patch, img, mask, edges):
+
+  pass
 
 
 # Start of program
@@ -103,38 +119,43 @@ MASK_PATH = 'output/space_mask.jpg'
 OUT_FOLDER = 'output/patch/'
 OUT_NAME = 'space_patch_'
 
-# MASK_INPAINT = [255, 255, 255]
-MASK_NONE = [0, 0, 0]
 
-ext = IMG_PATH.split('.')[1]
-io = ImageIO(ext)
+# image reader
+io = ImageIO(ext=IMG_PATH.split('.')[1])
 
+# read image
 img_np = io.load(IMG_PATH)
+img = img_np.tolist()
+
+# build edges
 edges = CannyEdgeDetection().generate_edges(img_np).tolist()
 
-img = img_np.tolist()
+# build mask
+MASK_NONE = [0, 0, 0]
 mask_np = io.load(MASK_PATH)
-
 mask_np[mask_np > 126] = 255
 mask_np[mask_np <= 126] = 0
-
 mask = mask_np.tolist()
 
-
+# patch information
 PATCH_SIZE = 7
 num_patch_elements = PATCH_SIZE * PATCH_SIZE
-RESET_RATE = 0.20
 
 # contained information
-patch_to_coordinates = {}
-coordinates_to_patch = {}
-to_fill = set()
+patch_to_coordinates = {}  # maps a patch to coordinates that live inside it
+coordinates_to_patch = {}  # maps a coordinate to all patches it exists in
 
-# choosing the importance of which point to fill
-# format -> (no. surrounding unmasked, edge point, heap_operation_count, ..)
-importance = []
+# identifier mappings
+identifier_patch_to_coordinates = {}  # maps a patch_id to its top left-corner coordinate
+identifier_coordinates_to_patch = {}  # maps a coordinate to the patch where it is the most top left coordinate (if exists)
 
-patch_no = 0
+# sets
+to_fill = set()  # set containing coordinates that require filling
+full_patches = set()  # set containing ids of patches that are completely filled
+partial_patches = set()  # set containing ids of patches that are not completely filled
+
+
+patch_id = 0
 
 # build patches 
 # iterate over array
@@ -142,7 +163,12 @@ nrows = len(img)
 ncols = len(img[0])
 for row in range(nrows - PATCH_SIZE):
   for col in range(ncols - PATCH_SIZE):
-    patch_to_coordinates[patch_no] = set()
+    patch_to_coordinates[patch_id] = set()
+    full_patches.add(patch_id)  # remove partial patches after
+
+    # do identifier mappings
+    identifier_coordinates_to_patch[(row, col)] = patch_id
+    identifier_patch_to_coordinates[patch_id] = (row, col)
 
     # iterate over PATCH_SIZE x PATCH_SIZE window
     for prow in range(PATCH_SIZE):
@@ -153,35 +179,55 @@ for row in range(nrows - PATCH_SIZE):
         tcol = col + pcol
         coordinates = (trow, tcol)
 
-        patch_to_coordinates[patch_no].add(coordinates)
+        patch_to_coordinates[patch_id].add(coordinates)
 
-        # only add point to partial map if it is a black pixel
-        if mask[trow][tcol] != MASK_NONE: to_fill.add(coordinates)
+        # add coordinates to to_fill if it doesn't have a black mask pixel
+        # i.e. this pixel is required to be inpainted
+        if mask[trow][tcol] != MASK_NONE:
+          to_fill.add(coordinates)
+          partial_patches.add(patch_id)
         
         # build patch information into dicts
         if coordinates not in coordinates_to_patch: coordinates_to_patch[coordinates] = set()
-        coordinates_to_patch[coordinates].add(patch_no)
+        coordinates_to_patch[coordinates].add(patch_id)
 
      # increment patch
-    patch_no += 1
+    patch_id += 1
 
+# remove partial patches
+for patch_id in partial_patches:
+  full_patches.remove(patch_id)
+
+# choosing the importance of which point to fill
+# format -> (no. surrounding unmasked, edge point, heap_operation_count, ..)
 # extract importance of patches
 importance = get_important_patches(to_fill, mask, coordinates_to_patch, patch_to_coordinates, edges, num_patch_elements)
 
+# begin inpatinging
 steps = 0
 while to_fill:
   steps += 1
   
-  # re-calibrate when we get to a 
+  # re-calibrate important points when required
   if len(importance) == 0:
     importance = get_important_patches(to_fill, mask, coordinates_to_patch, patch_to_coordinates, edges, num_patch_elements)
   
+  # extract patch to be inpainted
   important_tuple = heapq.heappop(importance)
   num_unmasked = important_tuple[1]
-  patch_id = important_tuple[2]
 
   # this is the patch we will use
-  identified_patch = patch_to_coordinates[patch_id]
+  identified_patch_id = important_tuple[2]
+  identified_patch = patch_to_coordinates[identified_patch_id]
+
+  # update full and partial patches
+  if identified_patch_id in full_patches:
+    continue
+  partial_patches.remove(identified_patch_id)
+  full_patches.add(identified_patch_id)
+
+  # find the most similar patch to identified_patch
+  similar_patch = get_similar_patch(identified_patch, img, mask, edges)
 
   # deduce coordinates that need filling
   coordiantes_to_fill = {c for c in identified_patch if mask[c[0]][c[1]] != MASK_NONE}
@@ -197,13 +243,21 @@ while to_fill:
     to_fill.remove(coordinates)
     mask[coordinates[0]][coordinates[1]] = MASK_NONE
 
+    # connected patches to filled coordinates
+    for connected_patch_id in coordinates_to_patch[coordinates]:
+      connected_patch = patch_to_coordinates[connected_patch_id]
+
+      # if the connected patch is now filled
+      if connected_patch_id in full_patches: continue
+      if get_patch_masked_num(connected_patch, mask) == 0:
+        if connected_patch_id in partial_patches:
+          partial_patches.remove(connected_patch_id)
+          full_patches.add(connected_patch_id)
+
+
   print("len=", len(to_fill))
   
   # DEBUG: 
   # if steps % 50 == 0 or len(to_fill) == 0:
   #   io.save(img, OUT_NAME + str(steps), OUT_FOLDER, True)
-
-
-
-
-
+print()
