@@ -67,21 +67,23 @@ def get_important_patches(to_fill, mask, coordinates_to_patch, patch_to_coordina
     neighbours = [n for n in get_neighbours(fill_coordinates, mask) if mask[n[0]][n[1]] == MASK_NONE]
     if len(neighbours) == 0: continue
     
+    # extract patches this coordinate appears in
+    patches_appear_in = coordinates_to_patch[fill_coordinates]
 
-    patches_in = coordinates_to_patch[fill_coordinates]
-
-    each_patch = []
-    for patch_id in patches_in:
+    # consider each of these patches and measure each patch by importance
+    viable_patches = []
+    for patch_id in patches_appear_in:
       patch = patch_to_coordinates[patch_id]
       patch_information = get_patch_points(patch, mask, edges, num_patch_elements)
       patch_size = patch_information[0]
       patch_points = patch_information[1]
       if min_patch_size <= patch_size <= max_patch_size:
-        heapq.heappush(each_patch, (-patch_points, -patch_size, patch_id))
+        heapq.heappush(viable_patches, (-patch_points, -patch_size, patch_id))
 
-    if len(each_patch) == 0: continue
+    # if no solution can be found, we skip this coordinate
+    if len(viable_patches) == 0: continue
 
-    best_patch = heapq.heappop(each_patch)
+    best_patch = heapq.heappop(viable_patches)
     best_patch_points = best_patch[0]
     best_patch_size = best_patch[1]
     best_patch_id = best_patch[2]
@@ -180,16 +182,16 @@ while to_fill:
   identified_patch = patch_to_coordinates[patch_id]
 
   # deduce coordinates that need filling
-  fill_patch = {c for c in identified_patch if mask[c[0]][c[1]] != MASK_NONE}
+  coordiantes_to_fill = {c for c in identified_patch if mask[c[0]][c[1]] != MASK_NONE}
 
   # fill coordinates
-  for coordinates in fill_patch:
+  for coordinates in coordiantes_to_fill:
     img[coordinates[0]][coordinates[1]] = [255, 0, 0]
     mask[coordinates[0]][coordinates[1]] = MASK_NONE
 
   # remove coordinates that have been filled and update our mask
   to_remove = set()
-  for coordinates in fill_patch:
+  for coordinates in coordiantes_to_fill:
     to_fill.remove(coordinates)
     mask[coordinates[0]][coordinates[1]] = MASK_NONE
 
