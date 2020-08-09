@@ -94,6 +94,8 @@ def get_important_patches(to_fill, mask, coordinates_to_patch, patch_to_coordina
 
   return to_return
 
+
+
 # Start of program
 
 IMG_PATH = 'assets/spaceman.jpg'
