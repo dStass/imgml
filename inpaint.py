@@ -11,6 +11,22 @@ from processing.edge_processing import CannyEdgeDetection
 
 # Functions
 
+def get_neighbours(coordinates, img):
+  nrows = len(img)
+  ncols = len(img[0])
+
+  r = coordinates[0]
+  c = coordinates[1]
+
+  to_return = [
+    [r - 1, c],
+    [r + 1, c],
+    [r, c - 1],
+    [r, c + 1]
+  ]
+
+  return [t for t in to_return if 0 <= t[0] < nrows and 0 <= t[1] < ncols]
+
 def normalised(nparr):
   norm = np.linalg.norm(nparr)
   max_val = np.amax(nparr)
@@ -48,6 +64,9 @@ def get_important_patches(to_fill, mask, coordinates_to_patch, patch_to_coordina
 
   for fill_coordinates in to_fill:
     # optimisation: skip non-border points
+    neighbours = [n for n in get_neighbours(fill_coordinates, mask) if mask[n[0]][n[1]] == MASK_NONE]
+    if len(neighbours) == 0: continue
+    
 
     patches_in = coordinates_to_patch[fill_coordinates]
 
