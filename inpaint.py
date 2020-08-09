@@ -1,10 +1,11 @@
-import time
 import heapq
+import math
+import time
 
 import cv2
+import matplotlib.pyplot as plt
 import numpy as np
 from scipy import ndimage
-import matplotlib.pyplot as plt
 
 from processing.image_processing import ImageIO
 from processing.edge_processing import CannyEdgeDetection
@@ -27,6 +28,17 @@ def get_neighbours(coordinates, img):
     [r, c + 1]
   ]
   return [t for t in to_return if 0 <= t[0] < nrows and 0 <= t[1] < ncols]
+
+
+def get_squared_difference(arr1, arr2):
+  """
+  assumes len(arr1) == len(arr2)
+  """
+  to_return = 0
+  for i in range(len(arr1)):
+    to_return += pow((arr1[i] - arr2[i]), 2)
+  return to_return
+
 
 def normalised(nparr):
   norm = np.linalg.norm(nparr)
@@ -72,7 +84,7 @@ def get_important_patches(to_fill, mask, coordinates_to_patch, patch_to_coordina
   operation_count = 0
 
   # min and max masked elements in a patch arbitrarily chosen
-  min_patch_size = int(0.3 * num_patch_elements)
+  min_patch_size = int(0.5 * num_patch_elements)
   max_patch_size = num_patch_elements
 
   for fill_coordinates in to_fill:
@@ -107,16 +119,66 @@ def get_important_patches(to_fill, mask, coordinates_to_patch, patch_to_coordina
 
   return to_return
 
-def get_similar_patch(identified_patch, img, mask, edges):
+def get_similar_patch(identified_patch_id, img, mask, edges):
+  """
 
-  pass
+
+  """
+
+  MAX_SEARCH_RADIUS = 32
+  MIN_SEARCH_RADIUS = 2
+
+  identified_patch = patch_to_coordinates[identified_patch_id]
+  identified_topleft = identified_patch[0]
+
+  ncoordinates = len(identified_patch)  # extract the length of elements in identified_patch
+  candidate_patches = []
+  for candidate_patch_id in full_patches:
+    # if candidate_patch_id == 
+    candidate_patch = patch_to_coordinates[candidate_patch_id]
+    candidate_topleft = candidate_patch[0]
+
+    distance_from_identified = math.sqrt(get_squared_difference(identified_topleft, candidate_topleft))
+    if distance_from_identified < MIN_SEARCH_RADIUS or distance_from_identified > MAX_SEARCH_RADIUS: continue
+
+
+
+    # compare each pair of coordinates
+    # sum on squared differences
+    points_rgb = 0
+    available_information = 0
+    for index in range(ncoordinates):
+      identified_coordinate = identified_patch[index]
+      identified_row = identified_coordinate[0]
+      identified_col = identified_coordinate[1]
+
+      candidate_coordinate = candidate_patch[index]
+      candidate_row = candidate_coordinate[0]
+      candidate_col = candidate_coordinate[1]
+
+      # skip comparison if it is a point we are trying to fill
+      if mask[identified_row][identified_col] != MASK_NONE:
+        continue
+      
+      points_rgb += get_squared_difference(img[identified_row][identified_col], img[candidate_row][candidate_col])
+      available_information += 1
+
+    points = points_rgb
+    heapq.heappush(candidate_patches, (points, available_information, candidate_patch_id))
+  
+  most_similar_tup = heapq.heappop(candidate_patches)
+
+  most_similar = most_similar_tup[-1]
+  print(identified_patch[0], patch_to_coordinates[most_similar][0])
+  return most_similar
+
 
 
 # Start of program
 
 IMG_PATH = 'assets/spaceman.jpg'
 MASK_PATH = 'output/space_mask.jpg'
-OUT_FOLDER = 'output/patch/'
+OUT_FOLDER = 'output/inpaint/'
 OUT_NAME = 'space_patch_'
 
 
@@ -154,7 +216,6 @@ to_fill = set()  # set containing coordinates that require filling
 full_patches = set()  # set containing ids of patches that are completely filled
 partial_patches = set()  # set containing ids of patches that are not completely filled
 
-
 patch_id = 0
 
 # build patches 
@@ -163,7 +224,7 @@ nrows = len(img)
 ncols = len(img[0])
 for row in range(nrows - PATCH_SIZE):
   for col in range(ncols - PATCH_SIZE):
-    patch_to_coordinates[patch_id] = set()
+    patch_to_coordinates[patch_id] = []
     full_patches.add(patch_id)  # remove partial patches after
 
     # do identifier mappings
@@ -179,7 +240,7 @@ for row in range(nrows - PATCH_SIZE):
         tcol = col + pcol
         coordinates = (trow, tcol)
 
-        patch_to_coordinates[patch_id].add(coordinates)
+        patch_to_coordinates[patch_id].append(coordinates)
 
         # add coordinates to to_fill if it doesn't have a black mask pixel
         # i.e. this pixel is required to be inpainted
@@ -188,8 +249,8 @@ for row in range(nrows - PATCH_SIZE):
           partial_patches.add(patch_id)
         
         # build patch information into dicts
-        if coordinates not in coordinates_to_patch: coordinates_to_patch[coordinates] = set()
-        coordinates_to_patch[coordinates].add(patch_id)
+        if coordinates not in coordinates_to_patch: coordinates_to_patch[coordinates] = []
+        coordinates_to_patch[coordinates].append(patch_id)
 
      # increment patch
     patch_id += 1
@@ -220,26 +281,40 @@ while to_fill:
   identified_patch_id = important_tuple[2]
   identified_patch = patch_to_coordinates[identified_patch_id]
 
-  # update full and partial patches
+  # early exit for repeated work
   if identified_patch_id in full_patches:
     continue
+
+  # find the most similar patch to identified_patch
+  similar_patch_id = get_similar_patch(identified_patch_id, img, mask, edges)
+  similar_patch = patch_to_coordinates[similar_patch_id]
+
+  # fill coordinates
+  # for coordinates in coordinates_to_fill:
+  #   img[coordinates[0]][coordinates[1]] = [255, 0, 0]
+  #   mask[coordinates[0]][coordinates[1]] = MASK_NONE
+
+  for index in range(len(identified_patch)):
+    identified_coordinate = identified_patch[index]
+    identified_row = identified_coordinate[0]
+    identified_col = identified_coordinate[1]
+
+    similar_coordinate = similar_patch[index]
+    similar_row = similar_coordinate[0]
+    similar_col = similar_coordinate[1]
+
+    # fill img if it is a point we are trying to fill
+    if mask[identified_row][identified_col] != MASK_NONE:
+      img[identified_row][identified_col] = img[similar_row][similar_col]
+
+  # update full and partial patches
   partial_patches.remove(identified_patch_id)
   full_patches.add(identified_patch_id)
 
-  # find the most similar patch to identified_patch
-  similar_patch = get_similar_patch(identified_patch, img, mask, edges)
-
-  # deduce coordinates that need filling
-  coordiantes_to_fill = {c for c in identified_patch if mask[c[0]][c[1]] != MASK_NONE}
-
-  # fill coordinates
-  for coordinates in coordiantes_to_fill:
-    img[coordinates[0]][coordinates[1]] = [255, 0, 0]
-    mask[coordinates[0]][coordinates[1]] = MASK_NONE
-
   # remove coordinates that have been filled and update our mask
   to_remove = set()
-  for coordinates in coordiantes_to_fill:
+  coordinates_to_fill = {c for c in identified_patch if mask[c[0]][c[1]] != MASK_NONE}
+  for coordinates in coordinates_to_fill:
     to_fill.remove(coordinates)
     mask[coordinates[0]][coordinates[1]] = MASK_NONE
 
@@ -258,6 +333,6 @@ while to_fill:
   print("len=", len(to_fill))
   
   # DEBUG: 
-  # if steps % 50 == 0 or len(to_fill) == 0:
-  #   io.save(img, OUT_NAME + str(steps), OUT_FOLDER, True)
+  if steps % 10 == 0 or len(to_fill) == 0:
+    io.save(img, OUT_NAME + str(steps), OUT_FOLDER, True)
 print()
