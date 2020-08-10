@@ -11,7 +11,6 @@ from processing.model import LinearRegressionModel
 from processing.image_processing import ImageIO
 from processing.edge_processing import CannyEdgeDetection
 
-
 class ImageInpainter:
   def __init__(self):
     pass
@@ -78,10 +77,17 @@ class ImageInpainter:
 
     return np.array(current_mat).astype('uint8')
 
-  def remove_and_inpaint(self, folder, name, image_np, mask_np, inpaint_config):
+  def get_image_difference(self, im1_np, im2_np):
+    difference = im1_np - im2_np
+    sq_difference = np.power(difference, 2)
+    sq_sum = np.sum(sq_difference)
+    return sq_sum
+
+  def remove_and_inpaint(self, folder, name, image_np, mask_np, inpaint_config, compared_to_np = None):
     MASK = 'mask'
     SHOW = 'show'
     SAVE = 'save'
+    TEST = 'test'
     NAIVE = 'NaiveLinearInpainter'
     INTERMEDIATE = 'IntermediateLinearInpainter'
     EXEMPLAR = 'ExemplarInpainter'
@@ -92,41 +98,58 @@ class ImageInpainter:
 
     # handle mask
     current_config = inpaint_config[MASK]
-    if current_config[SHOW] or current_config[SAVE]:
+    if current_config[SHOW] or current_config[SAVE] or current_config[TEST]:
       inpaint_results[MASK] = mask_np
       inpaint_results_ordered.append(MASK)
 
     # handle NaiveLinearInpainter
     current_config = inpaint_config[NAIVE]
-    if current_config[SHOW] or current_config[SAVE]:
+    if current_config[SHOW] or current_config[SAVE] or current_config[TEST]:
       inpainted_np = NaiveLinearInpainter().remove_and_inpaint(folder, name, image_np, mask_np)
       inpaint_results[NAIVE] = inpainted_np
       inpaint_results_ordered.append(NAIVE)
 
     # handle IntermediateLinearInpainter
     current_config = inpaint_config[INTERMEDIATE]
-    if current_config[SHOW] or current_config[SAVE]:
+    if current_config[SHOW] or current_config[SAVE] or current_config[TEST]:
       inpainted_np = IntermediateLinearInpainter().remove_and_inpaint(folder, name, image_np, mask_np)
       inpaint_results[INTERMEDIATE] = inpainted_np
       inpaint_results_ordered.append(INTERMEDIATE)
 
     # handle Exemplar
     current_config = inpaint_config[EXEMPLAR]
-    if current_config[SHOW] or current_config[SAVE]:
+    if current_config[SHOW] or current_config[SAVE] or current_config[TEST]:
       inpainted_np = ExemplarInpainter().remove_and_inpaint(folder, name, image_np, mask_np)
       inpaint_results[EXEMPLAR] = inpainted_np
       inpaint_results_ordered.append(EXEMPLAR)
     
+    # returned report
+    returned_report = {}
+
     # handle showing and saving
+    # also handles comparing the image with the compared_to image for performance analysis
     for inpainter in inpaint_results_ordered:
+
+      # handles showing the image
       if inpaint_config[inpainter][SHOW]:
         plt.imshow(inpaint_results[inpainter])
         plt.show()
 
+      # handles saving the image
       if inpaint_config[inpainter][SAVE]:
-        io.save(mask_np.tolist(), name + '_' + inpainter, folder, False)
+        io.save(npaint_config[inpainter].tolist(), name + '_' + inpainter, folder, False)
+      
+      # handles comparison inpainted images with
+      if compared_to_np is not None:
+        sq_diff = self.get_image_difference(inpaint_results[inpainter], compared_to_np)
+        # print("Squared difference from base image using {} = {}".format(inpainter, sq_diff))
+        returned_report[inpainter] = sq_diff
+    
+    return returned_report
 
-  
+
+
+    # handle comparing inpainted images with 
 
 class Inpainter:
   MASK_REMOVE = [255, 255, 255]
@@ -168,7 +191,7 @@ class NaiveLinearInpainter(Inpainter):
     """
     Assumes dim(image_np) == dim(mask_np)
     """
-    print("Starting NaiveLinearInpainter")
+    # print("Starting NaiveLinearInpainter")
 
     # extract dimensions
     nrows = image_np.shape[0]
@@ -265,7 +288,7 @@ class IntermediateLinearInpainter(Inpainter):
     """
     Assumes dim(image_np) == dim(mask_np)
     """
-    print("Starting IntermediateLinearInpainter")
+    # print("Starting IntermediateLinearInpainter")
 
     # extract dimensions
     nrows = image_np.shape[0]
@@ -430,7 +453,6 @@ class ExemplarInpainter(Inpainter):
     ]
     return [t for t in to_return if 0 <= t[0] < nrows and 0 <= t[1] < ncols]
 
-
   def get_squared_difference(self, arr1, arr2):
     """
     assumes len(arr1) == len(arr2)
@@ -439,7 +461,6 @@ class ExemplarInpainter(Inpainter):
     for i in range(len(arr1)):
       to_return += pow((arr1[i] - arr2[i]), 2)
     return to_return
-
 
   def normalised(self, nparr):
     norm = np.linalg.norm(nparr)
@@ -578,7 +599,7 @@ class ExemplarInpainter(Inpainter):
     """
 
     """
-    print("Starting ExemplarInpainter")
+    # print("Starting ExemplarInpainter")
     img = image_np.tolist()
 
     # build edges

@@ -20,6 +20,11 @@ config = {}
 with open('config.json') as json_file:
     config = json.load(json_file)
 
+# program mode
+PROGRAM_MODE = config['PROGRAM_MODE']
+PROGRAM_MODE_0 = 0
+PROGRAM_MODE_1 = 1
+
 # Export settings
 OUTPUT_FOLDER = config['OUTPUT_FOLDER']
 OUTPUT_NAME = config['OUTPUT_NAME']
@@ -145,10 +150,14 @@ while True:
   # inpaint
   elif k == ord('i'):
     inpainter = ImageInpainter()
-    inpainter.remove_and_inpaint(OUTPUT_FOLDER, OUTPUT_NAME, images[image_index][0], current_mask, inpaint_config)
+
+    if PROGRAM_MODE == PROGRAM_MODE_0:
+      inpainter.remove_and_inpaint(OUTPUT_FOLDER, OUTPUT_NAME, images[image_index][0], current_mask, inpaint_config)
+    else:
+      inpainter.remove_and_inpaint(OUTPUT_FOLDER, OUTPUT_NAME, current_layers[layer_index], current_mask, inpaint_config, images[image_index][0])
 
 
-    pass
+    
 
   # exit
   elif k == 27 or k == ord('q'):

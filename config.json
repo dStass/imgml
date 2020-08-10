@@ -1,7 +1,9 @@
 {
-  "IMG_PATH" : "assets/car.jpg",
+  "IMG_PATH" : "assets/spaceman.jpg",
   "OUTPUT_FOLDER" : "output/",
   "OUTPUT_NAME" : "car",
+
+  "PROGRAM_MODE" : 1,
 
   "layers" : [
     "canny",
@@ -12,23 +14,27 @@
     "_COMMENT" : "DO NOT CHANGE THE STRUCTURE, ONLY MODIFY TRUE/FALSE VALUES",
 
     "mask" : {
-      "show" : true,
-      "save" : false
+      "show" : false,
+      "save" : false,
+      "test" : false
     },
 
     "NaiveLinearInpainter" : {
-      "show" : true,
-      "save" : false
+      "show" : false,
+      "save" : false,
+      "test" : true
     },
 
     "IntermediateLinearInpainter" : {
-      "show" : true,
-      "save" : false
+      "show" : false,
+      "save" : false,
+      "test" : true
     },
     
     "ExemplarInpainter" : {
-      "show" : true,
-      "save" : false
+      "show" : false,
+      "save" : false,
+      "test" : true
     }
   },
 
@@ -42,5 +48,10 @@
     "CURSOR_FILL_COLOUR" : [212, 12, 243],
     "CURSOR_RADIUS" : 6,
     "CURSOR_ALPHA_VALUE" : 0.7
+  },
+
+  "analysis" : {
+    "TRIALS_PER_TEST_RADIUS" : 20,
+    "radius" : 2
   }
 }
