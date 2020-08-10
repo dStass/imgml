@@ -16,13 +16,10 @@ from processing.inpaint_processing import ImageInpainter
 
 # Export settings
 OUTPUT_FOLDER = "output/"
-OUTPUT_NAME = "car"
-
-# constants
-NUM_LAYERS = 2  # layers per image
+OUTPUT_NAME = "spaceman"
 
 # import image
-IMG_PATH = 'assets/car.jpg'
+IMG_PATH = 'assets/spaceman.jpg'
 ext = IMG_PATH.split('.')[1]
 io = ImageIO(ext)
 loaded_images = io.load_recursive_quantised(IMG_PATH, 20, 2, 8)
@@ -33,6 +30,7 @@ images = [[li] for li in loaded_images]
 for i in range(len(images)):
   layer = images[i]
   layer.append(CannyEdgeDetection().generate_edges(layer[0]))
+  layer.append(EntropyEdgeDetection().generate_binary_edges_heatmap(layer[0]))
 
 NUM_LAYERS = len(images[0])
 

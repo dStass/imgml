@@ -76,7 +76,7 @@ def get_patch_masked_num(patch, mask):
     if mask[coordinate[0]][coordinate[1]] != MASK_NONE: unmasked += 1
   return unmasked
 
-def get_important_patches(to_fill, mask, coordinates_to_patch, patch_to_coordinates, edges, num_patch_elements):
+def get_important_patches(to_fill, mask, coordinates_to_patch, patch_to_coordinates, edges, num_patch_elements, max_patch_size = None):
   """
   traverses to_fill (points that needs to be inpainted)
   """
@@ -84,8 +84,10 @@ def get_important_patches(to_fill, mask, coordinates_to_patch, patch_to_coordina
   operation_count = 0
 
   # min and max masked elements in a patch arbitrarily chosen
-  min_patch_size = int(0.5 * num_patch_elements)
-  max_patch_size = num_patch_elements
+  min_patch_size = int(0.3 * num_patch_elements)
+  if not max_patch_size:
+    max_patch_size = int(0.7*num_patch_elements)
+  # max_patch_size = num_patch_elements
 
   for fill_coordinates in to_fill:
     # optimisation: skip non-border points
@@ -117,16 +119,17 @@ def get_important_patches(to_fill, mask, coordinates_to_patch, patch_to_coordina
     heapq.heappush(to_return, (best_patch_points, best_patch_size, best_patch_id))
     operation_count += 1
 
+  if len(to_return) == 0: 
+    return get_important_patches(to_fill, mask, coordinates_to_patch, patch_to_coordinates, edges, num_patch_elements, max_patch_size + 2)
   return to_return
 
-def get_similar_patch(identified_patch_id, img, mask, edges):
+def get_similar_patch(identified_patch_id, img, mask, edges, MAX_SEARCH_RADIUS = 16):
   """
 
 
   """
 
-  MAX_SEARCH_RADIUS = 32
-  MIN_SEARCH_RADIUS = 2
+  MIN_SEARCH_RADIUS = 0
 
   identified_patch = patch_to_coordinates[identified_patch_id]
   identified_topleft = identified_patch[0]
@@ -140,8 +143,6 @@ def get_similar_patch(identified_patch_id, img, mask, edges):
 
     distance_from_identified = math.sqrt(get_squared_difference(identified_topleft, candidate_topleft))
     if distance_from_identified < MIN_SEARCH_RADIUS or distance_from_identified > MAX_SEARCH_RADIUS: continue
-
-
 
     # compare each pair of coordinates
     # sum on squared differences
@@ -166,18 +167,19 @@ def get_similar_patch(identified_patch_id, img, mask, edges):
     points = points_rgb
     heapq.heappush(candidate_patches, (points, available_information, candidate_patch_id))
   
+  if len(candidate_patches) == 0: return get_similar_patch(identified_patch_id, img, mask, edges, MAX_SEARCH_RADIUS * 2)
+  
   most_similar_tup = heapq.heappop(candidate_patches)
-
   most_similar = most_similar_tup[-1]
-  print(identified_patch[0], patch_to_coordinates[most_similar][0])
+  # print(identified_patch[0], patch_to_coordinates[most_similar][0])
   return most_similar
 
 
 
 # Start of program
 
-IMG_PATH = 'assets/spaceman.jpg'
-MASK_PATH = 'output/space_mask.jpg'
+IMG_PATH = 'report/space/spaceman.jpg'
+MASK_PATH = 'report/space/space_mask.jpg'
 OUT_FOLDER = 'output/inpaint/'
 OUT_NAME = 'space_patch_'
 
@@ -267,7 +269,6 @@ importance = get_important_patches(to_fill, mask, coordinates_to_patch, patch_to
 # begin inpatinging
 steps = 0
 while to_fill:
-  steps += 1
   
   # re-calibrate important points when required
   if len(importance) == 0:
@@ -333,6 +334,10 @@ while to_fill:
   print("len=", len(to_fill))
   
   # DEBUG: 
-  if steps % 10 == 0 or len(to_fill) == 0:
+  if steps % 50 == 0 or len(to_fill) == 0:
     io.save(img, OUT_NAME + str(steps), OUT_FOLDER, True)
+
+  # update steps
+  steps += 1
+
 print()
