@@ -15,6 +15,7 @@ from processing.image_processing import ImageIO
 from processing.edge_processing import EdgeDetection, EntropyEdgeDetection, CannyEdgeDetection
 from processing.model import Model
 from processing.inpaint_processing import ImageInpainter
+from process_csv.csvrw import CSVReadWrite
 
 def generate_mask(img_np, radius):
   """
@@ -27,14 +28,14 @@ def generate_mask(img_np, radius):
   centre0 = [0,0]
 
   # randomly find a centre for the circle
-  while centre0[0] - radius < 0 or centre0[0] + radius > nrows or centre0[1] - radius < 0 or centre0[0] + radius > ncols:
+  while centre0[0] - radius < 0 or centre0[0] + radius >= nrows or centre0[1] - radius < 0 or centre0[1] + radius >= ncols:
     rand_row = int(random.random() * nrows)
     rand_col = int(random.random() * ncols)
     centre0 = [rand_row, rand_col]
 
   centre1 = [0,0]
   # randomly find a second centre
-  while centre1[0] - radius < 0 or centre1[0] + radius > nrows or centre1[1] - radius < 0 or centre1[0] + radius > ncols or centre0[1] == centre1[1]:
+  while centre1[0] - radius < 0 or centre1[0] + radius >= nrows or centre1[1] - radius < 0 or centre1[1] + radius >= ncols or centre0[1] == centre1[1]:
     rand_row = int(random.random() * nrows)
     rand_col = int(random.random() * ncols)
     centre1 = [rand_row, rand_col]
@@ -94,24 +95,37 @@ ip = ImageInpainter()
 
 # reporting information
 full_report = {
-  'NaiveLinearInpainter' : {},
-  'IntermediateLinearInpainter' : {},
-  'ExemplarInpainter' : {}
+  'NaiveLinearInpainter' : [],
+  'IntermediateLinearInpainter' : [],
+  'ExemplarInpainter' : []
 }
 
 
 # for radius in range(radius_details['start'], radius_details['end'], radius_details['step']):
+# csv_list = [[k for k in full_report]]
 radius = analysis_config['radius']
 for trial in range(TRIALS_PER_TEST_RADIUS):
   mask = generate_mask(loaded_image, radius)
   returned_report = ip.remove_and_inpaint(OUTPUT_FOLDER, OUTPUT_NAME, loaded_image, mask, inpaint_config, loaded_image)
+  # new_entry = []
   for each_report in returned_report:
-    if radius not in full_report[each_report]:
-      full_report[each_report][radius] = []
-    full_report[each_report][radius].append(returned_report[each_report])
-  print(returned_report)
+    # if radius not in full_report[each_report]:
+    #   full_report[each_report][radius] = []
+    full_report[each_report].append(returned_report[each_report])
+    # new_entry.append(returned_report[each_report])
+  # csv_list.append(new_entry)
+#   print(returned_report)
 
-print(full_report)
+# print(full_report)
+
+csv_list = []
+for key in full_report:
+  new_list = [key] + [str(val) for val in full_report[key]]
+  csv_list.append(new_list)
+
+csvrw = CSVReadWrite()
+csvrw.list_to_csv(csv_list, OUTPUT_FOLDER+OUTPUT_NAME+'_REPORT')
+
 
 
 # # # # # # # # # # #

@@ -106,8 +106,19 @@ There are two main classes:
 
 Related code can be found in inpaint_processing.py.
 
-There are three main classes:
+There are three main classes, where each takes the image and a mask as a guide to inpainting.
 
-1. NaiveLinearInpainter: 
-2. IntermediateLinearInpainter
-3. ExemplarInpainter
+1. NaiveLinearInpainter: Implementation of the first method outlined in the paper.
+   This method finds all non-masked points directly neighbouring masked points and uses those points as training data points for a linear regression of
+   two variables (row and column) with the response being the colour (between 0 and 255). This is split across all three channels R G B separately as
+   we assume these models occur independently of each other. No formal statistical tests have been tested to verify this assumption.
+   This will generate the best fitting gradient plane by least squares and fill the mask.
+
+2. IntermediateLinearInpainter: A similar method, however, instead of utilising **all** surrounding neighbours to the masked region, we only consider those that exists with at least one same coordinate. An example is given a point to inpaint X at (row_0, col_0), we only consider the four points with two directly to the left and right of X with a fixed row at row_0 and similarly the other two directly above and below with fixed column at col_0. This method on average, yields better results when compared to method 1.
+
+3. ExemplarInpainter: A different approach, this works by patching sub-regions (7x7 pixel blocks) one by one by prioritising patches in some way and then comparing the patch with other patches, finding the most similar patch and copy the pixel values across for the pixels requiring inpainting. The method chosen to prioritise regions in this project is simply based on how much information in the form of edges exists in the region. This is adapted from the literature where linear structures are prioritised as this is heavily impactful to the solution. Within the literature however, directional gradients and orthogonal vectors at pixels are considered. This proved to be too difficult to implement (see denoise.py for attempts at implimenting image gradient processes).
+Once the most prioritised patch is found, we compare it to other candidate patches in the image and pick the one that minimises the square sum of residuals (of each channel in each pixel) of the entire patch. This method is quite computationally expensive and takes a lot longer compared to methods 1 and 2, especially for large images or large patch sizes.
+
+## Section 5: Analysis
+
+The file analysis.py details a method for randomly producing masks and comparing an inpainted image to the original using the squared sum of residuals described above. This will then automatically write to a csv file with the information used to plot the charts in the report.

@@ -13,6 +13,7 @@ class CSVReadWrite:
     return data
 
   def list_to_csv(self, save_data, save_path):
+    if not save_path.endswith('.csv'): save_path += '.csv'
     with open(save_path, 'w', newline='') as csvfile:
       writer = csv.writer(csvfile)
       for row in save_data:
