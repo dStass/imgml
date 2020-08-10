@@ -126,28 +126,7 @@ class ImageInpainter:
       if inpaint_config[inpainter][SAVE]:
         io.save(mask_np.tolist(), name + '_' + inpainter, folder, False)
 
-    # print(inpaint_results)
-
-    # io = ImageIO()
-    # inpaint_results = {}
-    # inpaint_results['mask'] = mask_np
-    # # save mask
-    # io.save(mask_np.tolist(), name + '_mask', folder, True)
-    
-    # # apply inpainting using naive linear inpainter
-    # naive_linear_np = NaiveLinearInpainter().remove_and_inpaint(folder, name, image_np, mask_np)
-    # inpaint_results['naive_linear_np'] = naive_linear_np
-
-    # plt.imshow(naive_linear_np)
-    # plt.show()
-
-    # # apply inpainting using intermediate linear inpainter
-    # intermediate_linear_np = IntermediateLinearInpainter().remove_and_inpaint(folder, name, image_np, mask_np)
-    # inpaint_results['intermediate_linear_np'] = intermediate_linear_np
-
-    # plt.imshow(intermediate_linear_np)
-    # plt.show()
-    # pass
+  
 
 class Inpainter:
   MASK_REMOVE = [255, 255, 255]
@@ -189,7 +168,7 @@ class NaiveLinearInpainter(Inpainter):
     """
     Assumes dim(image_np) == dim(mask_np)
     """
-    print("nailinreg")
+    print("Starting NaiveLinearInpainter")
 
     # extract dimensions
     nrows = image_np.shape[0]
@@ -270,7 +249,7 @@ class NaiveLinearInpainter(Inpainter):
         elif colour > 255: colour = 255
         combined_rgb[i] = colour
       inpainted_image[row][col] = combined_rgb
-
+    
     return np.array(inpainted_image).astype('uint8')
 
 
@@ -286,7 +265,7 @@ class IntermediateLinearInpainter(Inpainter):
     """
     Assumes dim(image_np) == dim(mask_np)
     """
-    print("intlinreg")
+    print("Starting IntermediateLinearInpainter")
 
     # extract dimensions
     nrows = image_np.shape[0]
@@ -599,6 +578,7 @@ class ExemplarInpainter(Inpainter):
     """
 
     """
+    print("Starting ExemplarInpainter")
     img = image_np.tolist()
 
     # build edges
@@ -735,14 +715,5 @@ class ExemplarInpainter(Inpainter):
               self.partial_patches.remove(connected_patch_id)
               self.full_patches.add(connected_patch_id)
 
-
-      
-      # DEBUG: 
-      # if steps % 50 == 0 or len(to_fill) == 0:
-      #   print("step=", steps)
-      #   io.save(img, OUT_NAME + str(steps), OUT_FOLDER, True)
-
-      # update steps
       steps += 1
-
     return np.array(img)
