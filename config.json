@@ -1,0 +1,37 @@
+{
+  "IMG_PATH" : "report/space/spaceman.jpg",
+  "OUTPUT_FOLDER" : "output/",
+  "OUTPUT_NAME" : "spaceman",
+
+  "layers" : [
+    "canny",
+    "entropy"
+  ],
+
+  "inpaint" : {
+    "NaiveLinearInpainter" : {
+      "show" : true,
+      "save" : false
+    },
+    "IntermediateLinearInpainter" : {
+      "show" : true,
+      "save" : false
+    },
+    "ExemplarInpainter" : {
+      "show" : true,
+      "save" : false
+    }
+  },
+
+  "load_kmeans" : {
+    "start" : 20,
+    "end" : 4,
+    "step" : 4
+  },
+
+  "cursor" : {
+    "CURSOR_FILL_COLOUR" : [212, 12, 243],
+    "CURSOR_RADIUS" : 6,
+    "CURSOR_ALPHA_VALUE" : 0.7
+  }
+}

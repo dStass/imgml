@@ -3,6 +3,7 @@
 # # # # # # # # # # #
 
 import math
+import json
 import os
 
 import numpy as np
@@ -14,23 +15,33 @@ from processing.edge_processing import EdgeDetection, EntropyEdgeDetection, Cann
 from processing.model import Model
 from processing.inpaint_processing import ImageInpainter
 
+
+config = {}
+with open('config.json') as json_file:
+    config = json.load(json_file)
+
 # Export settings
-OUTPUT_FOLDER = "output/"
-OUTPUT_NAME = "spaceman"
+OUTPUT_FOLDER = config['OUTPUT_FOLDER']
+OUTPUT_NAME = config['OUTPUT_NAME']
 
 # import image
-IMG_PATH = 'assets/spaceman.jpg'
+IMG_PATH = config['IMG_PATH']
 ext = IMG_PATH.split('.')[1]
 io = ImageIO(ext)
-loaded_images = io.load_recursive_quantised(IMG_PATH, 20, 2, 8)
+
+load_kmeans = config['load_kmeans']
+loaded_images = io.load_recursive_quantised(IMG_PATH, load_kmeans['start'], load_kmeans['end'], load_kmeans['step'])
 
 # set up images and layers
 images = [[li] for li in loaded_images]
 
+layers_config = config['layers']
+# existing_layers = [k for k in layers_config]
+
 for i in range(len(images)):
   layer = images[i]
-  layer.append(CannyEdgeDetection().generate_edges(layer[0]))
-  layer.append(EntropyEdgeDetection().generate_binary_edges_heatmap(layer[0]))
+  if 'canny' in layers_config: layer.append(CannyEdgeDetection().generate_edges(layer[0]))
+  if 'entropy' in layers_config: layer.append(EntropyEdgeDetection().generate_binary_edges_heatmap(layer[0]))
 
 NUM_LAYERS = len(images[0])
 
@@ -42,25 +53,28 @@ current_display = current_layers[layer_index]
 current_mask = np.zeros((loaded_images[0].shape)).astype('uint8')
 
 # cursor settings
-show_edges_bool = False
-FILL_COLOUR = (212, 12, 243)
 BLACK_COLOUR = (0, 0, 0)
 WHITE_COLOUR = (255, 255, 255)
-MOUSE_RADIUS = 6
-MOUSE_ALPHA = 0.7
-mouse_pressed = False
-mouse_x = -1
-mouse_y = -1
 
-# mouse events
-def mouse_callback(event, x, y, flags, param):
+cursor_config = config['cursor']
+CURSOR_FILL_COLOUR = tuple(cursor_config['CURSOR_FILL_COLOUR'])
+CURSOR_RADIUS = cursor_config['CURSOR_RADIUS']
+CURSOR_ALPHA_VALUE = cursor_config['CURSOR_ALPHA_VALUE']
+
+# current cursor state
+cursor_pressed = False
+cursor_x = -1
+cursor_y = -1
+
+# cursor events
+def cursor_callback(event, x, y, flags, param):
   def draw_circle():
     alpha_value = 1
 
     # -1 to fill the circle
     for i, layer in enumerate(current_layers):
       overlay = layer.copy()
-      cv2.circle(overlay, (x,y), MOUSE_RADIUS, FILL_COLOUR, -1) 
+      cv2.circle(overlay, (x,y), CURSOR_RADIUS, CURSOR_FILL_COLOUR, -1) 
       # image_to_show = cv2.addWeighted(overlay, alpha_value, image_to_show, 1 - alpha_value, 0)
       current_layers[i] = cv2.addWeighted(overlay, alpha_value, layer, 1 - alpha_value, 0)
       current_display = current_layers[i]
@@ -68,13 +82,13 @@ def mouse_callback(event, x, y, flags, param):
     # update mask
     global current_mask
     overlay = current_mask.copy()
-    cv2.circle(overlay, (x,y), MOUSE_RADIUS, WHITE_COLOUR, -1)
+    cv2.circle(overlay, (x,y), CURSOR_RADIUS, WHITE_COLOUR, -1)
     current_mask = cv2.addWeighted(overlay, alpha_value, current_mask, 1 - alpha_value, 0).astype('uint8')
 
-  global current_display, mouse_pressed, mouse_x, mouse_y
+  global current_display, cursor_pressed, cursor_x, cursor_y
 
   if event == cv2.EVENT_LBUTTONDOWN:
-    mouse_pressed = True
+    cursor_pressed = True
     draw_circle()
     # s_x, s_y = x, y
     print(x, y)
@@ -83,18 +97,18 @@ def mouse_callback(event, x, y, flags, param):
     # image_to_show = np.copy(np.copy(loaded_images[0]))
 
   elif event == cv2.EVENT_MOUSEMOVE:
-    if mouse_pressed:
+    if cursor_pressed:
       draw_circle()
       # cv2.rectangle(image_to_show, (s_x, s_y), (x, y), (0, 255, 0), 1)
 
   elif event == cv2.EVENT_LBUTTONUP:
-    mouse_pressed = False
+    cursor_pressed = False
 
-  mouse_x = x
-  mouse_y = y
+  cursor_x = x
+  cursor_y = y
 
 cv2.namedWindow('image')
-cv2.setMouseCallback('image', mouse_callback)
+cv2.setMouseCallback('image', cursor_callback)
 
 
 while True:
@@ -148,10 +162,10 @@ while True:
 
   # pointer
   elif k == 45 or k == ord(']'):
-    MOUSE_RADIUS = max(10, MOUSE_RADIUS + 1)
+    CURSOR_RADIUS = min(25, CURSOR_RADIUS + 1)
 
   elif k == 43 or k == ord('['):
-    MOUSE_RADIUS = max(2, MOUSE_RADIUS - 1)
+    CURSOR_RADIUS = max(1, CURSOR_RADIUS - 1)
 
   # reset
   elif k == ord('r'):
@@ -183,8 +197,8 @@ while True:
   overlay = current_layers[layer_index].copy()
 
   # -1 to fill the circle
-  cv2.circle(overlay, (mouse_x, mouse_y), MOUSE_RADIUS, FILL_COLOUR, -1) 
-  current_display = cv2.addWeighted(overlay, MOUSE_ALPHA, current_display, 1 - MOUSE_ALPHA, 0)
+  cv2.circle(overlay, (cursor_x, cursor_y), CURSOR_RADIUS, CURSOR_FILL_COLOUR, -1) 
+  current_display = cv2.addWeighted(overlay, CURSOR_ALPHA_VALUE, current_display, 1 - CURSOR_ALPHA_VALUE, 0)
 
 cv2.destroyAllWindows()
 
