@@ -1,7 +1,7 @@
 {
-  "IMG_PATH" : "report/space/spaceman.jpg",
+  "IMG_PATH" : "assets/car.jpg",
   "OUTPUT_FOLDER" : "output/",
-  "OUTPUT_NAME" : "spaceman",
+  "OUTPUT_NAME" : "car",
 
   "layers" : [
     "canny",
@@ -9,14 +9,23 @@
   ],
 
   "inpaint" : {
+    "_COMMENT" : "DO NOT CHANGE THE STRUCTURE, ONLY MODIFY TRUE/FALSE VALUES",
+
+    "mask" : {
+      "show" : true,
+      "save" : false
+    },
+
     "NaiveLinearInpainter" : {
       "show" : true,
       "save" : false
     },
+
     "IntermediateLinearInpainter" : {
       "show" : true,
       "save" : false
     },
+    
     "ExemplarInpainter" : {
       "show" : true,
       "save" : false

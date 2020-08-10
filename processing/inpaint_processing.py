@@ -1,8 +1,16 @@
-import numpy as np
+import heapq
+import math
+import time
+
+import cv2
 import matplotlib.pyplot as plt
+import numpy as np
+from scipy import ndimage
 
 from processing.model import LinearRegressionModel
 from processing.image_processing import ImageIO
+from processing.edge_processing import CannyEdgeDetection
+
 
 class ImageInpainter:
   def __init__(self):
@@ -70,27 +78,76 @@ class ImageInpainter:
 
     return np.array(current_mat).astype('uint8')
 
-  def remove_and_inpaint(self, folder, name, image_np, mask_np):
-    io = ImageIO()
+  def remove_and_inpaint(self, folder, name, image_np, mask_np, inpaint_config):
+    MASK = 'mask'
+    SHOW = 'show'
+    SAVE = 'save'
+    NAIVE = 'NaiveLinearInpainter'
+    INTERMEDIATE = 'IntermediateLinearInpainter'
+    EXEMPLAR = 'ExemplarInpainter'
+
+    # a place to store results
     inpaint_results = {}
-    inpaint_results['mask'] = mask_np
-    # save mask
-    io.save(mask_np.tolist(), name + '_mask', folder, True)
+    inpaint_results_ordered = []
+
+    # handle mask
+    current_config = inpaint_config[MASK]
+    if current_config[SHOW] or current_config[SAVE]:
+      inpaint_results[MASK] = mask_np
+      inpaint_results_ordered.append(MASK)
+
+    # handle NaiveLinearInpainter
+    current_config = inpaint_config[NAIVE]
+    if current_config[SHOW] or current_config[SAVE]:
+      inpainted_np = NaiveLinearInpainter().remove_and_inpaint(folder, name, image_np, mask_np)
+      inpaint_results[NAIVE] = inpainted_np
+      inpaint_results_ordered.append(NAIVE)
+
+    # handle IntermediateLinearInpainter
+    current_config = inpaint_config[INTERMEDIATE]
+    if current_config[SHOW] or current_config[SAVE]:
+      inpainted_np = IntermediateLinearInpainter().remove_and_inpaint(folder, name, image_np, mask_np)
+      inpaint_results[INTERMEDIATE] = inpainted_np
+      inpaint_results_ordered.append(INTERMEDIATE)
+
+    # handle Exemplar
+    current_config = inpaint_config[EXEMPLAR]
+    if current_config[SHOW] or current_config[SAVE]:
+      inpainted_np = ExemplarInpainter().remove_and_inpaint(folder, name, image_np, mask_np)
+      inpaint_results[EXEMPLAR] = inpainted_np
+      inpaint_results_ordered.append(EXEMPLAR)
     
-    # apply inpainting using naive linear inpainter
-    naive_linear_np = NaiveLinearInpainter().remove_and_inpaint(folder, name, image_np, mask_np)
-    inpaint_results['naive_linear_np'] = naive_linear_np
+    # handle showing and saving
+    for inpainter in inpaint_results_ordered:
+      if inpaint_config[inpainter][SHOW]:
+        plt.imshow(inpaint_results[inpainter])
+        plt.show()
 
-    plt.imshow(naive_linear_np)
-    plt.show()
+      if inpaint_config[inpainter][SAVE]:
+        io.save(mask_np.tolist(), name + '_' + inpainter, folder, False)
 
-    # apply inpainting using intermediate linear inpainter
-    intermediate_linear_np = IntermediateLinearInpainter().remove_and_inpaint(folder, name, image_np, mask_np)
-    inpaint_results['intermediate_linear_np'] = intermediate_linear_np
+    # print(inpaint_results)
 
-    plt.imshow(intermediate_linear_np)
-    plt.show()
-    pass
+    # io = ImageIO()
+    # inpaint_results = {}
+    # inpaint_results['mask'] = mask_np
+    # # save mask
+    # io.save(mask_np.tolist(), name + '_mask', folder, True)
+    
+    # # apply inpainting using naive linear inpainter
+    # naive_linear_np = NaiveLinearInpainter().remove_and_inpaint(folder, name, image_np, mask_np)
+    # inpaint_results['naive_linear_np'] = naive_linear_np
+
+    # plt.imshow(naive_linear_np)
+    # plt.show()
+
+    # # apply inpainting using intermediate linear inpainter
+    # intermediate_linear_np = IntermediateLinearInpainter().remove_and_inpaint(folder, name, image_np, mask_np)
+    # inpaint_results['intermediate_linear_np'] = intermediate_linear_np
+
+    # plt.imshow(intermediate_linear_np)
+    # plt.show()
+    # pass
 
 class Inpainter:
   MASK_REMOVE = [255, 255, 255]
@@ -218,7 +275,9 @@ class NaiveLinearInpainter(Inpainter):
 
 
 class IntermediateLinearInpainter(Inpainter):
+  """
 
+  """
 
   def __init__(self):
     pass
@@ -369,3 +428,321 @@ class IntermediateLinearInpainter(Inpainter):
       return IntermediateLinearInpainter().remove_and_inpaint(folder, name, inpainted_np, new_mask)
 
     return inpainted_np
+
+
+class ExemplarInpainter(Inpainter):
+  def __init__(self):
+    pass
+  
+  def get_neighbours(self, coordinates, img):
+    """
+    get surrounding neighbours to a (r, c) pair in a given img
+    handles extreme image edge cases
+    """
+    nrows = len(img)
+    ncols = len(img[0])
+    r = coordinates[0]
+    c = coordinates[1]
+    to_return = [
+      [r - 1, c],
+      [r + 1, c],
+      [r, c - 1],
+      [r, c + 1]
+    ]
+    return [t for t in to_return if 0 <= t[0] < nrows and 0 <= t[1] < ncols]
+
+
+  def get_squared_difference(self, arr1, arr2):
+    """
+    assumes len(arr1) == len(arr2)
+    """
+    to_return = 0
+    for i in range(len(arr1)):
+      to_return += pow((arr1[i] - arr2[i]), 2)
+    return to_return
+
+
+  def normalised(self, nparr):
+    norm = np.linalg.norm(nparr)
+    max_val = np.amax(nparr)
+    return nparr / max_val
+
+  def get_patch_points(self, patch, mask, edges, num_patch_elements):
+    """
+    Returns 2 things:
+    1. points_size = number of "black" pixels in mask (or unmasked pixels)
+      -> synonynomous to pixels that exist that we can extrapolate from
+    2. points_edges = sum of how many "white" pixels in edges image
+      -> as edges and corners are white, we can use this as a guide to
+          measure importance of a patch
+
+    Assumptions:
+    - RGB values are the same (binary image) in edges, we only extract the red
+      pixel for simplicity
+    """
+    points_size = 0
+    points_edges = 0
+    for coordinate in patch:
+      points_edges += (edges[coordinate[0]][coordinate[1]][0] * (1 / 255))
+      if mask[coordinate[0]][coordinate[1]] == self.MASK_NONE: points_size += 1
+    points_edges /= num_patch_elements
+    points_size
+    return (points_size, points_edges)
+
+  def get_patch_masked_num(self, patch, mask):
+    """
+    Returns number of unmasked pixels
+    """
+    unmasked = 0
+    for coordinate in patch:
+      if mask[coordinate[0]][coordinate[1]] != self.MASK_NONE: unmasked += 1
+    return unmasked
+
+  def get_important_patches(self, to_fill, mask, edges, num_patch_elements, max_patch_size = None):
+    """
+    traverses to_fill (points that needs to be inpainted)
+    """
+    to_return = []
+    operation_count = 0
+
+    # min and max masked elements in a patch arbitrarily chosen
+    min_patch_size = int(0.3 * num_patch_elements)
+    if not max_patch_size:
+      max_patch_size = int(0.7*num_patch_elements)
+    # max_patch_size = num_patch_elements
+
+    for fill_coordinates in to_fill:
+      # optimisation: skip non-border points
+      neighbours = [n for n in self.get_neighbours(fill_coordinates, mask) if mask[n[0]][n[1]] == self.MASK_NONE]
+      if len(neighbours) == 0: continue
+      
+      # extract patches this coordinate appears in
+      patches_appear_in = self.coordinates_to_patch[fill_coordinates]
+
+      # consider each of these patches and measure each patch by importance
+      viable_patches = []
+      for patch_id in patches_appear_in:
+        patch = self.patch_to_coordinates[patch_id]
+        patch_information = self.get_patch_points(patch, mask, edges, num_patch_elements)
+        patch_size = patch_information[0]
+        patch_points = patch_information[1]
+        if min_patch_size <= patch_size <= max_patch_size:
+          heapq.heappush(viable_patches, (-patch_points, -patch_size, patch_id))
+
+      # if no solution can be found, we skip this coordinate
+      if len(viable_patches) == 0: continue
+
+      best_patch = heapq.heappop(viable_patches)
+      best_patch_points = best_patch[0]
+      best_patch_size = best_patch[1]
+      best_patch_id = best_patch[2]
+
+      # use a heap as a queue to maintain importance of a particular point
+      heapq.heappush(to_return, (best_patch_points, best_patch_size, best_patch_id))
+      operation_count += 1
+
+    if len(to_return) == 0: 
+      return self.get_important_patches(to_fill, mask, edges, num_patch_elements, max_patch_size + 2)
+    return to_return
+
+  def get_similar_patch(self, identified_patch_id, img, mask, edges, MAX_SEARCH_RADIUS = 16):
+    """
+
+
+    """
+
+    MIN_SEARCH_RADIUS = 0
+
+    identified_patch = self.patch_to_coordinates[identified_patch_id]
+    identified_topleft = identified_patch[0]
+
+    ncoordinates = len(identified_patch)  # extract the length of elements in identified_patch
+    candidate_patches = []
+    for candidate_patch_id in self.full_patches:
+      # if candidate_patch_id == 
+      candidate_patch = self.patch_to_coordinates[candidate_patch_id]
+      candidate_topleft = candidate_patch[0]
+
+      distance_from_identified = math.sqrt(self.get_squared_difference(identified_topleft, candidate_topleft))
+      if distance_from_identified < MIN_SEARCH_RADIUS or distance_from_identified > MAX_SEARCH_RADIUS: continue
+
+      # compare each pair of coordinates
+      # sum on squared differences
+      points_rgb = 0
+      available_information = 0
+      for index in range(ncoordinates):
+        identified_coordinate = identified_patch[index]
+        identified_row = identified_coordinate[0]
+        identified_col = identified_coordinate[1]
+
+        candidate_coordinate = candidate_patch[index]
+        candidate_row = candidate_coordinate[0]
+        candidate_col = candidate_coordinate[1]
+
+        # skip comparison if it is a point we are trying to fill
+        if mask[identified_row][identified_col] != self.MASK_NONE:
+          continue
+        
+        points_rgb += self.get_squared_difference(img[identified_row][identified_col], img[candidate_row][candidate_col])
+        available_information += 1
+
+      points = points_rgb
+      heapq.heappush(candidate_patches, (points, available_information, candidate_patch_id))
+    
+    if len(candidate_patches) == 0: return self.get_similar_patch(identified_patch_id, img, mask, edges, MAX_SEARCH_RADIUS * 2)
+    
+    most_similar_tup = heapq.heappop(candidate_patches)
+    most_similar = most_similar_tup[-1]
+    return most_similar
+    
+  def remove_and_inpaint(self, folder, name, image_np, mask_np):
+    """
+
+    """
+    img = image_np.tolist()
+
+    # build edges
+    edges = CannyEdgeDetection().generate_edges(image_np).tolist()
+
+    # build mask
+    self.MASK_NONE = [0, 0, 0]
+    mask_np[mask_np > 126] = 255
+    mask_np[mask_np <= 126] = 0
+    mask = mask_np.tolist()
+
+    # patch information
+    PATCH_SIZE = 7
+    num_patch_elements = PATCH_SIZE * PATCH_SIZE
+
+    # contained information
+    self.patch_to_coordinates = {}  # maps a patch to coordinates that live inside it
+    self.coordinates_to_patch = {}  # maps a coordinate to all patches it exists in
+
+    # identifier mappings
+    self.identifier_patch_to_coordinates = {}  # maps a patch_id to its top left-corner coordinate
+    self.identifier_coordinates_to_patch = {}  # maps a coordinate to the patch where it is the most top left coordinate (if exists)
+
+    # sets
+    to_fill = set()  # set containing coordinates that require filling
+    self.full_patches = set()  # set containing ids of patches that are completely filled
+    self.partial_patches = set()  # set containing ids of patches that are not completely filled
+
+    patch_id = 0
+
+    # build patches 
+    # iterate over array
+    nrows = len(img)
+    ncols = len(img[0])
+    for row in range(nrows - PATCH_SIZE):
+      for col in range(ncols - PATCH_SIZE):
+        self.patch_to_coordinates[patch_id] = []
+        self.full_patches.add(patch_id)  # remove partial patches after
+
+        # do identifier mappings
+        self.identifier_coordinates_to_patch[(row, col)] = patch_id
+        self.identifier_patch_to_coordinates[patch_id] = (row, col)
+
+        # iterate over PATCH_SIZE x PATCH_SIZE window
+        for prow in range(PATCH_SIZE):
+          for pcol in range(PATCH_SIZE):
+
+            # sum (trow = total row, tcol = total col)
+            trow = row + prow
+            tcol = col + pcol
+            coordinates = (trow, tcol)
+
+            self.patch_to_coordinates[patch_id].append(coordinates)
+
+            # add coordinates to to_fill if it doesn't have a black mask pixel
+            # i.e. this pixel is required to be inpainted
+            if mask[trow][tcol] != self.MASK_NONE:
+              to_fill.add(coordinates)
+              self.partial_patches.add(patch_id)
+            
+            # build patch information into dicts
+            if coordinates not in self.coordinates_to_patch: self.coordinates_to_patch[coordinates] = []
+            self.coordinates_to_patch[coordinates].append(patch_id)
+
+        # increment patch
+        patch_id += 1
+
+    # remove partial patches
+    for patch_id in self.partial_patches:
+      self.full_patches.remove(patch_id)
+
+    # choosing the importance of which point to fill
+    # format -> (no. surrounding unmasked, edge point, heap_operation_count, ..)
+    # extract importance of patches
+    importance = self.get_important_patches(to_fill, mask, edges, num_patch_elements)
+
+    # begin inpatinging
+    steps = 0
+    while to_fill:
+      
+      # re-calibrate important points when required
+      if len(importance) == 0:
+        importance = self.get_important_patches(to_fill, mask, edges, num_patch_elements)
+      
+      # extract patch to be inpainted
+      important_tuple = heapq.heappop(importance)
+      num_unmasked = important_tuple[1]
+
+      # this is the patch we will use
+      identified_patch_id = important_tuple[2]
+      identified_patch = self.patch_to_coordinates[identified_patch_id]
+
+      # early exit for repeated work
+      if identified_patch_id in self.full_patches:
+        continue
+
+      # find the most similar patch to identified_patch
+      similar_patch_id = self.get_similar_patch(identified_patch_id, img, mask, edges)
+      similar_patch = self.patch_to_coordinates[similar_patch_id]
+
+      # fill coordinates
+      for index in range(len(identified_patch)):
+        identified_coordinate = identified_patch[index]
+        identified_row = identified_coordinate[0]
+        identified_col = identified_coordinate[1]
+
+        similar_coordinate = similar_patch[index]
+        similar_row = similar_coordinate[0]
+        similar_col = similar_coordinate[1]
+
+        # fill img if it is a point we are trying to fill
+        if mask[identified_row][identified_col] != self.MASK_NONE:
+          img[identified_row][identified_col] = img[similar_row][similar_col]
+
+      # update full and partial patches
+      self.partial_patches.remove(identified_patch_id)
+      self.full_patches.add(identified_patch_id)
+
+      # remove coordinates that have been filled and update our mask
+      to_remove = set()
+      coordinates_to_fill = {c for c in identified_patch if mask[c[0]][c[1]] != self.MASK_NONE}
+      for coordinates in coordinates_to_fill:
+        to_fill.remove(coordinates)
+        mask[coordinates[0]][coordinates[1]] = self.MASK_NONE
+
+        # connected patches to filled coordinates
+        for connected_patch_id in self.coordinates_to_patch[coordinates]:
+          connected_patch = self.patch_to_coordinates[connected_patch_id]
+
+          # if the connected patch is now filled
+          if connected_patch_id in self.full_patches: continue
+          if self.get_patch_masked_num(connected_patch, mask) == 0:
+            if connected_patch_id in self.partial_patches:
+              self.partial_patches.remove(connected_patch_id)
+              self.full_patches.add(connected_patch_id)
+
+
+      
+      # DEBUG: 
+      # if steps % 50 == 0 or len(to_fill) == 0:
+      #   print("step=", steps)
+      #   io.save(img, OUT_NAME + str(steps), OUT_FOLDER, True)
+
+      # update steps
+      steps += 1
+
+    return np.array(img)
