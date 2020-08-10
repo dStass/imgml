@@ -126,29 +126,13 @@ class ImageIO:
 
     return (y, y, y)
 
+  def convert_greyscale(self, im):
+    to_return = [[self.transform_greyscale(r) for r in l] for l in im.tolist()]
+    return np.array(to_return)
 
   def load_greyscale(self, path):
-    im = io.imread(path)
-    im = resize(im, (self.IMG_SIZE, self.IMG_SIZE), anti_aliasing=False)
-    im = self.MAX_RGB * im
-
-    # remove alpha value
-    if im.shape[2] == 4:
-      im = np.delete(im, [3], axis=2)
-
-    # reshape
-    im_tp = np.transpose(im, [1,0,2])
-    nrows = im.shape[0]
-    ncols = im.shape[1]
-
-    # to_return = [[(0,0,0) for c in range(ncols)] for r in range(nrows)]
-    to_return = [[self.transform_greyscale(r) for r in l] for l in im_tp.tolist()]
-
-    # for row in range(nrows):
-    #   for col in range(ncols):
-    #     to_return[row][col] = self.transform_greyscale(to_return[row][col])
-
-    return to_return
+    im = self.load(path)
+    return self.convert_greyscale(im)
 
   def empty_matrix(self, height, width):
     return [[0 for w in range(width)] for h in range(height)]
